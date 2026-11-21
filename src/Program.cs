@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
@@ -6,17 +6,30 @@ using System.Security.Principal;
 using System.Threading;
 using System.Windows.Forms;
 
-[assembly: AssemblyTitle("核心分配工具")]
+[assembly: AssemblyTitle(CoreAllocator.Program.DisplayName)]
+[assembly: AssemblyProduct(CoreAllocator.Program.DisplayName)]
 [assembly: AssemblyDescription("手动分配选中进程的 CPU 亲和性，保存并恢复原设置")]
-[assembly: AssemblyVersion("0.1.1.0")]
+[assembly: AssemblyVersion("0.13.13.0")]
 
 namespace CoreAllocator
 {
     internal static class Program
     {
+        internal const string DisplayName = "CoreLane";
+
         [STAThread]
         private static int Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == "--test-window-worker")
+            {
+                Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
+                using (Form worker = new TestTargetWindow())
+                using (System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer { Interval = 180000 })
+                {
+                    timer.Tick += delegate { worker.Close(); }; timer.Start(); Application.Run(worker);
+                }
+                return 0;
+            }
             if (args.Length > 0 && args[0] == "--test-worker") { Thread.Sleep(180000); return 0; }
             if (args.Length == 2 && args[0] == "--self-test") return SelfTests.Run(args[1]);
             if (args.Length == 3 && args[0] == "--inspect")
@@ -37,6 +50,20 @@ namespace CoreAllocator
             }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            if (args.Length == 2 && (args[0] == AppStartup.EnableArgument || args[0] == AppStartup.DisableArgument))
+            {
+                try
+                {
+                    if (!Native.IsAdministrator || args[1] != AppStartup.UserSid) throw new UnauthorizedAccessException("请用当前 Windows 帐户的管理员权限确认配置。");
+                    AppStartup.SetEnabled(args[0] == AppStartup.EnableArgument, Application.ExecutablePath);
+                    return 0;
+                }
+                catch (Exception error)
+                {
+                    AppMessageBox.Show(Native.Explain(error), "管理员自启动配置失败");
+                    return 2;
+                }
+            }
             bool acquired = false;
             using (Mutex mutex = new Mutex(false, @"Local\CoreAllocator-" + WindowsIdentity.GetCurrent().User.Value))
             {
@@ -44,8 +71,13 @@ namespace CoreAllocator
                 {
                     try { acquired = mutex.WaitOne(0); }
                     catch (AbandonedMutexException) { acquired = true; }
-                    if (!acquired) { MessageBox.Show("当前会话已有一个核心分配工具在运行，请使用已有窗口。", "核心分配工具"); return 1; }
-                    string directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
+                    if (!acquired)
+                    {
+                        if (args.Length == 1 && args[0] == AppStartup.LogonArgument) return 0;
+                        AppMessageBox.Show("当前会话已有一个 " + DisplayName + " 实例在运行。请从任务栏或系统托盘打开。", DisplayName);
+                        return 1;
+                    }
+                    string directory = Path.Combine(Path.GetDirectoryName(AppStartup.OriginExecutable(Application.ExecutablePath)), "data");
                     Directory.CreateDirectory(directory);
                     using (FileStream fileLock = new FileStream(Path.Combine(directory, "instance.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
                     {
@@ -57,7 +89,7 @@ namespace CoreAllocator
                 }
                 catch (Exception error)
                 {
-                    MessageBox.Show(Native.Explain(error) + "\r\n\r\n请把程序放在有写入权限的文件夹，并保留 data 目录。", "启动失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    AppMessageBox.Show(Native.Explain(error) + "\r\n\r\n请把程序放在有写入权限的文件夹，并保留 data 目录。", "启动失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return 1;
                 }
                 finally { if (acquired) mutex.ReleaseMutex(); }

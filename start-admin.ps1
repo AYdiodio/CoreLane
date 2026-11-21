@@ -1,5 +1,5 @@
-$ErrorActionPreference = 'Stop'
-$appPath = Join-Path $PSScriptRoot 'dist\CoreAllocator.v0.1.1.exe'
+﻿$ErrorActionPreference = 'Stop'
+$appPath = Join-Path $PSScriptRoot 'dist\CoreLane.v0.13.13.exe'
 if (-not (Test-Path -LiteralPath $appPath)) { throw 'Application is missing. Run Build.cmd first.' }
 try {
     Start-Process -FilePath $appPath -WorkingDirectory ([System.IO.Path]::GetDirectoryName($appPath)) -Verb RunAs -WindowStyle Normal | Out-Null

@@ -1,4 +1,4 @@
-param([string]$OutputName = 'CoreAllocator.v0.1.1.exe')
+﻿param([string]$OutputName = 'CoreLane.v0.13.13.exe')
 $ErrorActionPreference = 'Stop'
 if ([System.IO.Path]::GetFileName($OutputName) -ne $OutputName -or -not $OutputName.EndsWith('.exe')) { throw 'OutputName must be an executable filename.' }
 $projectRoot = $PSScriptRoot
@@ -9,6 +9,14 @@ New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 $sourceFiles = @(Get-ChildItem -LiteralPath (Join-Path $projectRoot 'src') -Filter '*.cs' | ForEach-Object { $_.FullName })
 $sourceFiles += @(Get-ChildItem -LiteralPath (Join-Path $projectRoot 'tests') -Filter '*.cs' | ForEach-Object { $_.FullName })
 $arguments = @('/nologo', '/target:winexe', '/platform:x64', '/optimize+', '/utf8output', '/warn:4', '/warnaserror+', '/codepage:65001', ('/out:' + (Join-Path $outputDir $OutputName)), ('/win32manifest:' + (Join-Path $projectRoot 'app.manifest')), '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll', '/reference:System.Runtime.Serialization.dll', '/reference:System.Xml.dll')
+$appIcon = Join-Path $projectRoot 'assets\branding\blue-violet.ico'
+$arguments += '/win32icon:' + $appIcon
+$arguments += '/resource:' + $appIcon + ',CoreAllocator.BlueViolet.ico'
+$logoAtlas = Join-Path $projectRoot 'assets\icons\rounded-logos-v1.png'
+if (-not (Test-Path -LiteralPath $logoAtlas)) { throw 'Missing embedded logo atlas: assets\icons\rounded-logos-v1.png' }
+$arguments += '/resource:' + $logoAtlas + ',CoreAllocator.Assets.RoundedLogos.png'
+$arguments += '/reference:Microsoft.CSharp.dll'
+$arguments += '/resource:' + (Join-Path $projectRoot 'App.config') + ',CoreAllocator.App.config'
 & $compiler @arguments @sourceFiles
 if ($LASTEXITCODE -ne 0) { throw ('Build failed, compiler exit code: ' + $LASTEXITCODE) }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'App.config') -Destination (Join-Path $outputDir ($OutputName + '.config')) -Force

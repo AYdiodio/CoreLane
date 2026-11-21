@@ -29,6 +29,7 @@ namespace CoreAllocator
         internal int Number;
         internal int Group;
         internal ulong Mask;
+        internal byte EfficiencyClass;
     }
 
     internal static class Masks
@@ -59,6 +60,7 @@ namespace CoreAllocator
     internal sealed class Topology
     {
         internal string CpuName;
+        internal string CpuVendor;
         internal readonly List<CpuGroup> Groups = new List<CpuGroup>();
         internal readonly List<CpuCore> Cores = new List<CpuCore>();
         internal readonly List<CpuCluster> Clusters = new List<CpuCluster>();
@@ -84,7 +86,11 @@ namespace CoreAllocator
                         Topology result = Parse(bytes);
                         result.CpuName = "CPU";
                         using (RegistryKey key = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0"))
-                            if (key != null) result.CpuName = Convert.ToString(key.GetValue("ProcessorNameString", "CPU")).Trim();
+                            if (key != null)
+                            {
+                                result.CpuName = Convert.ToString(key.GetValue("ProcessorNameString", "CPU")).Trim();
+                                result.CpuVendor = Convert.ToString(key.GetValue("VendorIdentifier", "")).Trim();
+                            }
                         return result;
                     }
                     int error = Marshal.GetLastWin32Error();
@@ -136,7 +142,7 @@ namespace CoreAllocator
                         Require(data, p, 16, end);
                         ulong mask = BitConverter.ToUInt64(data, p);
                         int group = BitConverter.ToUInt16(data, p + 8);
-                        if (relation == 0) result.Cores.Add(new CpuCore { Number = coreNumber, Group = group, Mask = mask });
+                        if (relation == 0) result.Cores.Add(new CpuCore { Number = coreNumber, Group = group, Mask = mask, EfficiencyClass = data[offset + 9] });
                         else if (data[offset + 8] == 3)
                             result.Clusters.Add(new CpuCluster { Group = group, Mask = mask, CacheBytes = BitConverter.ToUInt32(data, offset + 12) });
                     }

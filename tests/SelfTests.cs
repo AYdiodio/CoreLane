@@ -8,7 +8,7 @@ using System.Text;
 
 namespace CoreAllocator
 {
-    internal static class SelfTests
+    internal static partial class SelfTests
     {
         private static readonly List<string> lines = new List<string>();
         private static int passed;
@@ -42,6 +42,30 @@ namespace CoreAllocator
                 {
                     Topology topology = Topology.Parse(Fixture(true));
                     Check(topology.Groups.Count == 2 && !topology.CanAssign, "multi-group guard");
+                });
+                Case("UI groups: two L3 groups preserve exact masks and group labels", delegate
+                {
+                    Topology topology = Topology.Parse(Fixture(false));
+                    List<CpuSelectionGroup> groups = CpuSelectionGroup.FromTopology(topology);
+                    Check(groups.Count == 2 && groups[0].Mask == 0xffff && groups[1].Mask == 0xffff0000, "native L3 masks preserved");
+                    Check(CpuSelectionGroup.Describe(0xffff, groups) == "CPU 组 1", "first group label");
+                    Check(CpuSelectionGroup.Describe(0xffff0000, groups) == "CPU 组 2", "second group label");
+                    Check(CpuSelectionGroup.Describe(1, groups).StartsWith("自定义", StringComparison.Ordinal), "partial mask remains custom");
+                });
+                Case("UI groups: sparse non-32-CPU machines do not get invented CPU numbers", delegate
+                {
+                    Topology topology = new Topology();
+                    topology.Groups.Add(new CpuGroup { Number = 0, Mask = 0x8000000000000035UL });
+                    List<CpuSelectionGroup> groups = CpuSelectionGroup.FromTopology(topology);
+                    Check(groups.Count == 1 && groups[0].Mask == topology.Available, "fallback preserves sparse and high bits");
+                    Check(CpuSelectionGroup.Describe(topology.Available, groups) == "CPU 组 1", "fallback name");
+                });
+                Case("UI groups: multi-group masks retain Windows group identity", delegate
+                {
+                    Topology topology = Topology.Parse(Fixture(true));
+                    List<CpuSelectionGroup> groups = CpuSelectionGroup.FromTopology(topology);
+                    Check(groups.Count == 3 && groups[2].WindowsGroup == 1 && groups[2].Mask == 3, "group 1 is not folded into group 0");
+                    Check(!topology.CanAssign, "presentation never enables unsupported assignment");
                 });
                 Case("topology: unknown records skipped; malformed lengths rejected", delegate
                 {
@@ -83,6 +107,29 @@ namespace CoreAllocator
                     Check(!Native.HasAffinityWriteAccess(0x00002000), "limited information right is insufficient");
                     Check(Native.HasAffinityWriteAccess(0x00103200), "actual SET_INFORMATION is recognized");
                 });
+                ApplicationGroupingTests();
+                ApplicationOrderingTests();
+                IconGroupingTests();
+                IconSimilarityTests();
+                IconInteractionTests();
+                DesktopDragTests();
+                LogoStyleTests();
+                IconAppearanceTests();
+                CpuPickerTests();
+                ResizeScrollTests(working);
+                CoreEditTests(working);
+                DragGestureTests(working);
+                AutomaticDefaultsTests(working);
+                IntelHybridTests();
+                SchemeTests(working);
+                ManualSchemeSaveTests(working);
+                GameSchemeRuleTests(working);
+                StartupAutomationTests(working);
+                CpuAssignmentLabelTests(working);
+                CapsuleControlsTests(working);
+                UnifiedViewTests(working);
+                TrayRuleTests(working);
+                PerformanceTests(working);
                 Topology actual = Topology.Read();
                 Case("live topology read", delegate
                 {
@@ -90,13 +137,122 @@ namespace CoreAllocator
                     lines.Add("INFO " + actual.CpuName + "; logical=" + actual.Groups.Sum(g => Masks.Bits(g.Mask).Count()) + "; physical=" + actual.Cores.Select(c => c.Number).Distinct().Count());
                     foreach (CpuCluster cluster in actual.Clusters) lines.Add("INFO " + cluster);
                 });
-                if (actual.CanAssign) LiveChildTests(actual, working);
+                if (actual.CanAssign) { LiveChildTests(actual, working); LiveApplicationTest(actual, working); LiveAutomationTest(actual, working); LiveHybridPolicyTest(working); LiveStartupAutomationTest(actual, working); }
                 else lines.Add("SKIP child affinity tests: machine uses multiple processor groups.");
             }
             catch (Exception error) { lines.Add("FAIL " + error); exit = 1; }
             lines.Add("RESULT " + (exit == 0 ? "PASS" : "FAIL") + " - " + passed + " test cases passed");
             File.WriteAllLines(report, lines.ToArray(), new UTF8Encoding(true));
             return exit;
+        }
+
+        private static void ApplicationGroupingTests()
+        {
+            ProcessRow main = new ProcessRow { Pid = 101, Created = 10, Name = "demo.exe", ExecutablePath = @"C:\GroupingFixture\Demo\demo.exe", Mask = 1 };
+            ProcessRow other = new ProcessRow { Pid = 102, Created = 20, Name = "demo.exe", ExecutablePath = @"c:\GroupingFixture\Demo\DEMO.EXE", Mask = 2 };
+            ProcessRow helper = new ProcessRow { Pid = 103, Created = 30, Name = "helper.exe", ExecutablePath = @"C:\GroupingFixture\Demo\resources\helper.exe", Mask = 1 };
+            Func<string, ProcessVisual> none = delegate { return null; };
+            Func<string, ProcessVisual> metadata = delegate { return new ProcessVisual { ProductName = "Fixture App", CompanyName = "Fixture Publisher", DisplayName = "Helper description" }; };
+            Case("apps: exact executable path merges instances and deduplicates operation targets", delegate
+            {
+                ApplicationGroup app = ApplicationGroup.Build(new[] { main, other }, none).Single();
+                Check(app.Members.Count == 2, "same path ignores case");
+                Check(ApplicationGroup.Targets(new[] { app, app }).Count == 2, "all members exactly once");
+            });
+            Case("apps: same executable name in different installations remains separate", delegate
+            {
+                ProcessRow unrelated = new ProcessRow { Pid = 104, Created = 40, Name = "demo.exe", ExecutablePath = @"C:\GroupingFixture\Other\demo.exe" };
+                Check(ApplicationGroup.Build(new[] { main, unrelated }, metadata).Count == 2, "same product in sibling installs not combined");
+            });
+            Case("apps: matching product publisher and parent install directory include helper executables", delegate
+            {
+                List<ApplicationGroup> apps = ApplicationGroup.Build(new[] { main, other, helper }, metadata);
+                Check(apps.Count == 1 && apps[0].Members.Count == 3, "known helper included");
+                Func<string, ProcessVisual> differentPublisher = delegate(string path) { return new ProcessVisual { ProductName = "Fixture App", CompanyName = path.EndsWith("helper.exe", StringComparison.OrdinalIgnoreCase) ? "Another Publisher" : "Fixture Publisher" }; };
+                Check(ApplicationGroup.Build(new[] { main, helper }, differentPublisher).Count == 2, "publisher mismatch isolated");
+                  Func<string, ProcessVisual> helperProduct = delegate(string path) { return new ProcessVisual {
+                      ProductName = path.EndsWith("helper.exe", StringComparison.OrdinalIgnoreCase) ? "Fixture App System Helper" : "Fixture App",
+                      CompanyName = "Fixture Publisher" }; };
+                  Check(ApplicationGroup.Build(new[] { main, helper }, helperProduct).Count == 1, "nested same-publisher product-family helper included");
+                  ProcessRow sibling = new ProcessRow { Pid = 105, Created = 50, Name = "helper.exe", ExecutablePath = @"C:\GroupingFixture\Demo\helper.exe" };
+                  Check(ApplicationGroup.Build(new[] { main, sibling }, helperProduct).Count == 2, "different products beside one another remain separate");
+            });
+            Case("apps: Windows hosts and unavailable paths are never merged using display names", delegate
+            {
+                string windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                ProcessRow a = new ProcessRow { Pid = 201, Created = 1, Name = "a.exe", ExecutablePath = Path.Combine(windows, "System32", "a.exe") };
+                ProcessRow b = new ProcessRow { Pid = 202, Created = 2, Name = "b.exe", ExecutablePath = Path.Combine(windows, "System32", "b.exe") };
+                Check(ApplicationGroup.Build(new[] { a, b }, metadata).Count == 2, "shared system directory isolated");
+                a.ExecutablePath = b.ExecutablePath = null;
+                Check(ApplicationGroup.Build(new[] { a, b }, none).Count == 2, "unknown paths use exact process identities");
+            });
+            Case("apps: new or reused process identities invalidate a previous group selection", delegate
+            {
+                ApplicationGroup app = ApplicationGroup.Build(new[] { main, other }, none).Single();
+                HashSet<string> checkedKeys = new HashSet<string>(new[] { main.Key, other.Key });
+                Check(app.WasSelected(checkedKeys), "unchanged membership retains selection");
+                app.Members.Add(helper);
+                Check(!app.WasSelected(checkedKeys), "new helper requires explicit new selection");
+                app.Members.Remove(helper);
+                app.Members[1] = new ProcessRow { Pid = other.Pid, Created = other.Created + 1 };
+                Check(!app.WasSelected(checkedKeys), "PID reuse never silently selected");
+            });
+            Case("apps: mixed affinity unreadable members and partial failures stay visible", delegate
+            {
+                ApplicationGroup app = ApplicationGroup.Build(new[] { main, other }, none).Single();
+                Check(app.Allocation(new List<CpuSelectionGroup>()) == "多种分配", "different member masks not misrepresented");
+                Dictionary<string, OperationResult> outcomes = new Dictionary<string, OperationResult>();
+                outcomes[main.Key] = new OperationResult { Success = true };
+                Check(app.ResultText(outcomes).Contains("未操作"), "missing outcomes not green success");
+                outcomes[other.Key] = new OperationResult { Success = false };
+                Check(app.ResultText(outcomes).StartsWith("部分失败", StringComparison.Ordinal), "one failure not hidden");
+                other.ReadError = "fixture denied";
+                Check(app.Allocation(new List<CpuSelectionGroup>()) == "部分无法读取", "unreadable member not hidden");
+                other.ReadError = null;
+            });
+            Case("apps: matching a helper returns the complete application membership", delegate
+            {
+                ApplicationGroup app = ApplicationGroup.Build(new[] { main, other, helper }, metadata).Single();
+                Check(app.Matches(new[] { "helper.exe" }, metadata) && app.Members.Count == 3, "filter does not truncate grouped targets");
+                Check(!app.Matches(new[] { "unrelated.exe" }, metadata), "unmatched app stays hidden");
+            });
+        }
+
+        private static void LiveApplicationTest(Topology topology, string working)
+        {
+            Case("live apps: grouped children apply together and restore each exact original", delegate
+            {
+                int[] bits = Masks.Bits(topology.Available).ToArray();
+                if (bits.Length < 2) { lines.Add("INFO grouped two-mask check needs at least two CPUs"); return; }
+                Process first = Process.Start(new ProcessStartInfo { FileName = typeof(SelfTests).Assembly.Location, Arguments = "--test-worker", UseShellExecute = false, CreateNoWindow = true });
+                Process second = null;
+                try
+                {
+                    second = Process.Start(new ProcessStartInfo { FileName = typeof(SelfTests).Assembly.Location, Arguments = "--test-worker", UseShellExecute = false, CreateNoWindow = true });
+                    ulong initialFirst = Read(first.Id), initialSecond = 1UL << bits[bits.Length - 1], target = 1UL << bits[0];
+                    using (ProcessHandle write = Native.Open(second.Id, true)) Native.SetAffinity(write, initialSecond);
+                    List<ProcessRow> members = new List<ProcessRow>();
+                    foreach (Process child in new[] { first, second })
+                        using (ProcessHandle read = Native.Open(child.Id, false)) members.Add(new ProcessRow { Pid = child.Id, Created = Native.Created(read), Name = "grouped-worker.exe", ExecutablePath = Native.ImagePath(read) });
+                    ApplicationGroup app = ApplicationGroup.Build(members, delegate { return null; }).Single();
+                    AffinityService service = new AffinityService(topology, new SnapshotStore(Path.Combine(working, "grouped-live.json")));
+                    ApplicationIconGroup bucket = ApplicationIconGroup.Build(new[] { app }).Single();
+                    ProcessSelection selected = new ProcessSelection(); selected.Set(new[] { members[0] }, true);
+                    AppDragPayload drag = new AppDragPayload(selected.Targets(bucket.Members));
+                    foreach (ProcessRow row in drag.Targets) CheckResult(service.Apply(row, target));
+                    Check(Read(first.Id) == target && Read(second.Id) == initialSecond, "only individually selected child changed, identical-icon sibling untouched");
+                    foreach (OriginalAffinity saved in service.Store.Items) CheckResult(service.Restore(saved));
+                    Check(Read(first.Id) == initialFirst && Read(second.Id) == initialSecond, "individual restore retains both originals");
+                    foreach (ProcessRow row in ApplicationGroup.Targets(new[] { app })) CheckResult(service.Apply(row, target));
+                    Check(Read(first.Id) == target && Read(second.Id) == target, "all selected app members changed");
+                    foreach (OriginalAffinity saved in service.Store.Items) CheckResult(service.Restore(saved));
+                    Check(Read(first.Id) == initialFirst && Read(second.Id) == initialSecond && service.Store.Items.Length == 0, "per-process originals remain distinct and recoverable");
+                }
+                finally
+                {
+                    foreach (Process child in new[] { first, second }) if (child != null) { if (!child.HasExited) { child.Kill(); child.WaitForExit(); } child.Dispose(); }
+                }
+            });
         }
 
         private static void LiveChildTests(Topology topology, string working)
@@ -125,6 +281,14 @@ namespace CoreAllocator
                         if (granted.HasValue) Throws(delegate { Native.EnsureCanSetAffinity(read); });
                     }
                     Check(Read(worker.Id) == original, "read handle preflight does not mutate child");
+                });
+                Case("live: icon path is read using the existing query-only handle", delegate
+                {
+                    using (ProcessHandle read = Native.Open(worker.Id, false))
+                    {
+                        Check(string.Equals(Path.GetFullPath(Native.ImagePath(read)), Path.GetFullPath(typeof(SelfTests).Assembly.Location), StringComparison.OrdinalIgnoreCase), "test worker executable path");
+                    }
+                    Check(Read(worker.Id) == original && service.Store.Items.Length == 0, "icon lookup changes no affinity or records");
                 });
                 Case("live: already-original restore verifies and clears record without setting affinity", delegate
                 {
@@ -242,9 +406,9 @@ namespace CoreAllocator
             for (int i = 0; i < masks.Length; i++) { data[24 + i * 48] = 64; data[25 + i * 48] = (byte)Masks.Bits(masks[i]).Count(); Put(data, 64 + i * 48, masks[i]); }
             return Record(4, data);
         }
-        private static byte[] CoreRecord(ushort group, ulong mask)
+        private static byte[] CoreRecord(ushort group, ulong mask, byte efficiencyClass = 0)
         {
-            byte[] data = new byte[40]; data[0] = 1;
+            byte[] data = new byte[40]; data[0] = 1; data[1] = efficiencyClass;
             Put(data, 22, (ushort)1); Put(data, 24, mask); Put(data, 32, group);
             return Record(0, data);
         }

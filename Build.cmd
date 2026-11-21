@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 cd /d "%~dp0"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0build.ps1"
 if errorlevel 1 (
@@ -6,5 +6,5 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-echo Double-click dist\CoreAllocator.v0.1.1.exe to start.
+echo Double-click Start.cmd to open CoreLane.
 pause

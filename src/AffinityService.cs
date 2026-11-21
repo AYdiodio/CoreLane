@@ -27,6 +27,7 @@ namespace CoreAllocator
         private readonly string path;
         private List<OriginalAffinity> items;
         internal OriginalAffinity[] Items { get { return items.ToArray(); } }
+        internal string DirectoryPath { get { return Path.GetDirectoryName(path); } }
 
         internal SnapshotStore(string path)
         {
@@ -58,6 +59,12 @@ namespace CoreAllocator
         }
         private void Commit(List<OriginalAffinity> next)
         {
+            SaveAtomically(path, next);
+            items = next;
+        }
+
+        internal static void SaveAtomically<T>(string path, T next)
+        {
             string directory = Path.GetDirectoryName(path);
             Directory.CreateDirectory(directory);
             string temporary = path + ".tmp-" + Guid.NewGuid().ToString("N");
@@ -65,12 +72,11 @@ namespace CoreAllocator
             {
                 using (FileStream stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 {
-                    new DataContractJsonSerializer(typeof(List<OriginalAffinity>)).WriteObject(stream, next);
+                    new DataContractJsonSerializer(typeof(T)).WriteObject(stream, next);
                     stream.Flush(true);
                 }
                 if (File.Exists(path)) File.Replace(temporary, path, null);
                 else File.Move(temporary, path);
-                items = next;
             }
             finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
@@ -81,8 +87,13 @@ namespace CoreAllocator
         internal int Pid;
         internal long Created;
         internal string Name;
+        internal string ExecutablePath;
         internal ulong Mask;
+        internal ulong? CpuSetMask;
         internal string ReadError;
+        internal uint Priority;
+        internal long CpuTicks;
+        internal long SampleTime;
         internal string Key { get { return Pid + ":" + Created; } }
     }
 
@@ -90,6 +101,8 @@ namespace CoreAllocator
     {
         internal bool Success;
         internal bool Skipped;
+        internal int Win32Error;
+        internal bool AffinityWriteDenied;
         internal int Pid;
         internal string Name;
         internal string Message;
@@ -121,9 +134,22 @@ namespace CoreAllocator
                         using (ProcessHandle handle = Native.Open(process.Id, false))
                         {
                             if (Native.IsExited(handle) || Native.Owner(handle) != sid) continue;
-                            ProcessRow row = new ProcessRow { Pid = process.Id, Created = Native.Created(handle), Name = process.ProcessName + ".exe" };
+                            long cpuTicks;
+                            ProcessRow row = new ProcessRow { Pid = process.Id, Created = Native.Created(handle, out cpuTicks), Name = process.ProcessName + ".exe",
+                                CpuTicks = cpuTicks, SampleTime = Stopwatch.GetTimestamp() };
+                            try { row.Priority = Native.Priority(handle); }
+                            catch (System.ComponentModel.Win32Exception) { /* Priority remains unknown. */ }
+                            try { row.ExecutablePath = Native.ImagePath(handle); }
+                            catch (System.ComponentModel.Win32Exception) { /* Icon lookup must never prevent process selection. */ }
                             try { ulong system; row.Mask = Native.Affinity(handle, out system); }
                             catch (Exception error) { row.ReadError = Native.Explain(error); }
+                            if (Topology.CanAssign)
+                            {
+                                try { row.CpuSetMask = CpuSetNative.ReadMask(handle); }
+                                catch (System.ComponentModel.Win32Exception) { }
+                                catch (EntryPointNotFoundException) { }
+                                catch (InvalidOperationException) { }
+                            }
                             rows.Add(row);
                         }
                     }
@@ -166,7 +192,15 @@ namespace CoreAllocator
                     result.Message = "已分配 CPU " + Masks.Format(actual) + "；原设置已保存。";
                 }
             }
-            catch (Exception error) { result.Message = Native.Explain(error); }
+            catch (Exception error)
+            {
+                var win32 = error as System.ComponentModel.Win32Exception;
+                if (win32 != null) result.Win32Error = win32.NativeErrorCode;
+                var native = error as NativeOperationException;
+                result.AffinityWriteDenied = error is AffinityWriteAccessException || native != null && native.AffinityWriteDenied;
+                if (result.AffinityWriteDenied) result.Win32Error = 5;
+                result.Message = Native.Explain(error);
+            }
             return result;
         }
 
@@ -231,12 +265,13 @@ namespace CoreAllocator
             OperationResult result = new OperationResult { Pid = row.Pid, Name = row.Name };
             try
             {
+                result.Message = "工具" + (Native.IsAdministrator ? "已是管理员" : "为普通权限") + "。";
                 using (ProcessHandle read = Native.Open(row.Pid, false))
                 {
                     Native.ValidateTarget(read, row.Pid, row.Created);
                     ulong system;
                     ulong current = Native.Affinity(read, out system);
-                    result.Message = "工具" + (Native.IsAdministrator ? "已是管理员" : "为普通权限") + "；当前 CPU " + Masks.Format(current) + "。";
+                    result.Message += " 当前 CPU " + Masks.Format(current) + "。";
                 }
                 using (ProcessHandle write = Native.Open(row.Pid, true))
                 {
@@ -249,7 +284,22 @@ namespace CoreAllocator
                 }
                 result.Message += " 本次只检查权限，未修改亲和性或恢复记录。";
             }
-            catch (Exception error) { result.Message = (result.Message ?? "") + " " + Native.Explain(error) + " 本次未修改亲和性或恢复记录。"; }
+            catch (Exception error) { result.Message += " " + Native.Explain(error) + " 本次未修改亲和性或恢复记录。"; }
+            if (Topology.CanAssign)
+            {
+                try
+                {
+                    using (ProcessHandle handle = Native.OpenForCpuSets(row.Pid))
+                    {
+                        Native.ValidateTarget(handle, row.Pid, row.Created);
+                        ulong mask = CpuSetNative.ReadMask(handle);
+                        CpuSetNative.EnsureWritable(handle);
+                        result.Message += "\r\nCPU 集：" + (mask == 0 ? "当前未设置" : "当前 CPU " + Masks.Format(mask)) +
+                            "。CPU 集句柄检查已通过，待实际应用后回读确认。";
+                    }
+                }
+                catch (Exception error) { result.Message += "\r\nCPU 集检查未通过：" + Native.Explain(error); }
+            }
             return result;
         }
 

@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
+using System.Text;
 using Microsoft.Win32.SafeHandles;
 
 namespace CoreAllocator
@@ -10,8 +11,13 @@ namespace CoreAllocator
     internal sealed class NativeOperationException : Win32Exception
     {
         internal readonly string Operation;
-        internal NativeOperationException(int code, string operation) : base(code) { Operation = operation; }
+        internal readonly bool AffinityWriteDenied;
+        internal NativeOperationException(int code, string operation, bool affinityWrite = false) : base(code)
+        { Operation = operation; AffinityWriteDenied = affinityWrite && code == 5; }
     }
+
+    internal sealed class AffinityWriteAccessException : InvalidOperationException
+    { internal AffinityWriteAccessException(string message) : base(message) { } }
 
     internal sealed class ProcessHandle : SafeHandleZeroOrMinusOneIsInvalid
     {
@@ -34,11 +40,17 @@ namespace CoreAllocator
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool SetProcessAffinityMask(ProcessHandle handle, UIntPtr mask);
         [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern uint GetPriorityClass(ProcessHandle handle);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetPriorityClass(ProcessHandle handle, uint value);
+        [DllImport("kernel32.dll", SetLastError = true)]
         private static extern uint WaitForSingleObject(ProcessHandle handle, uint milliseconds);
         [DllImport("advapi32.dll", SetLastError = true)]
         private static extern bool OpenProcessToken(ProcessHandle process, uint access, out IntPtr token);
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool ProcessIdToSessionId(uint processId, out uint sessionId);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool QueryFullProcessImageName(ProcessHandle handle, uint flags, StringBuilder name, ref uint size);
         [DllImport("ntdll.dll")]
         private static extern int NtQueryObject(ProcessHandle handle, int informationClass, IntPtr information, uint length, out uint returned);
 
@@ -49,21 +61,58 @@ namespace CoreAllocator
 
         internal static ProcessHandle Open(int pid, bool write)
         {
-            ProcessHandle handle = OpenProcess(0x1000U | 0x100000U | (write ? 0x0200U : 0U), false, pid);
+            return OpenWithAccess(pid, write ? 0x0200U : 0U, write ? "打开进程并申请修改权限" : "以只读方式打开进程", write);
+        }
+
+        internal static ProcessHandle OpenForCpuSets(int pid)
+        {
+            return OpenWithAccess(pid, 0x2000U, "打开进程并申请 CPU 集设置权限");
+        }
+
+        private static ProcessHandle OpenWithAccess(int pid, uint additionalAccess, string operation, bool affinityWrite = false)
+        {
+            ProcessHandle handle = OpenProcess(0x1000U | 0x100000U | additionalAccess, false, pid);
             if (handle.IsInvalid)
             {
                 int error = Marshal.GetLastWin32Error();
                 handle.Dispose();
-                throw new NativeOperationException(error, write ? "打开进程并申请修改权限" : "以只读方式打开进程");
+                throw new NativeOperationException(error, operation, affinityWrite);
             }
             return handle;
         }
 
         internal static long Created(ProcessHandle handle)
         {
+            long cpuTicks;
+            return Created(handle, out cpuTicks);
+        }
+
+        internal static long Created(ProcessHandle handle, out long cpuTicks)
+        {
             long created, exited, kernel, user;
             if (!GetProcessTimes(handle, out created, out exited, out kernel, out user)) throw Error("读取进程启动时间");
+            cpuTicks = kernel + user;
             return created;
+        }
+
+        internal static uint Priority(ProcessHandle handle)
+        {
+            uint value = GetPriorityClass(handle);
+            if (value == 0) throw Error("读取进程优先级");
+            return value;
+        }
+
+        internal static void SetPriority(ProcessHandle handle, uint value)
+        {
+            if (!SetPriorityClass(handle, value)) throw Error("设置进程优先级");
+        }
+
+        internal static string ImagePath(ProcessHandle handle)
+        {
+            StringBuilder name = new StringBuilder(32768);
+            uint size = (uint)name.Capacity;
+            if (!QueryFullProcessImageName(handle, 0, name, ref size)) throw Error("读取软件图标路径");
+            return name.ToString();
         }
 
         internal static bool IsExited(ProcessHandle handle)
@@ -86,7 +135,7 @@ namespace CoreAllocator
         internal static void SetAffinity(ProcessHandle handle, ulong mask)
         {
             EnsureCanSetAffinity(handle);
-            if (!SetProcessAffinityMask(handle, new UIntPtr(mask))) throw Error("写入亲和性");
+            if (!SetProcessAffinityMask(handle, new UIntPtr(mask))) throw new NativeOperationException(Marshal.GetLastWin32Error(), "写入亲和性", true);
         }
 
         // Diagnostic only: an OpenProcess success does not guarantee every requested right survived filtering.
@@ -111,7 +160,7 @@ namespace CoreAllocator
         {
             uint? granted = GrantedAccess(handle);
             if (granted.HasValue && !HasAffinityWriteAccess(granted.Value))
-                throw new InvalidOperationException("权限检查：系统返回的句柄缺少修改亲和性权限（PROCESS_SET_INFORMATION）；请求的写权限被过滤，未执行写入。" +
+                throw new AffinityWriteAccessException("权限检查：系统返回的句柄缺少修改亲和性权限（PROCESS_SET_INFORMATION）；请求的写权限被过滤，未执行写入。" +
                     " 实际权限 0x" + granted.Value.ToString("X8") + "，工具" + (IsAdministrator ? "已是管理员。" : "当前为普通权限。") +
                     " 这类限制不能仅靠重复点击解决。");
         }

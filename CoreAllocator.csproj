@@ -1,18 +1,24 @@
-<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
     <Platform Condition="'$(Platform)' == ''">x64</Platform>
     <ProjectGuid>{F2EF85C9-81F2-4A64-929A-28835F8AB276}</ProjectGuid>
     <OutputType>WinExe</OutputType>
     <RootNamespace>CoreAllocator</RootNamespace>
-    <AssemblyName>CoreAllocator.v0.1.1</AssemblyName>
+    <AssemblyName>CoreLane.v0.13.13</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <PlatformTarget>x64</PlatformTarget>
     <OutputPath>dist\</OutputPath>
+    <ApplicationIcon>assets\branding\blue-violet.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Optimize>true</Optimize>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="assets\branding\blue-violet.ico"><LogicalName>CoreAllocator.BlueViolet.ico</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="App.config"><LogicalName>CoreAllocator.App.config</LogicalName></EmbeddedResource>
+    <Reference Include="Microsoft.CSharp" />
+    <Compile Include="src\ScrollControls.cs" />
+    <Compile Include="tests\ResizeScrollTests.cs" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
@@ -21,12 +27,77 @@
     <Reference Include="System.Xml" />
     <Compile Include="src\Native.cs" />
     <Compile Include="src\Topology.cs" />
+    <Compile Include="src\IntelHybridInfo.cs" />
     <Compile Include="src\AffinityService.cs" />
+    <Compile Include="src\RetainedAssignments.cs" />
+    <Compile Include="src\AppStartup.cs" />
+    <Compile Include="src\AppUninstall.cs" />
+    <Compile Include="src\WindowsScheduling.cs" />
+    <Compile Include="src\SteamLaunchAffinity.cs" />
+    <Compile Include="src\CpuSetService.cs" />
+    <Compile Include="src\PriorityService.cs" />
+    <Compile Include="src\BackgroundProtection.cs" />
     <Compile Include="src\MainForm.cs" />
+    <Compile Include="src\MainForm.Tray.cs" />
+    <Compile Include="src\ManualSchemeSave.cs" />
+    <Compile Include="src\UnifiedDialogs.cs" />
+    <Compile Include="src\MainForm.Automation.cs" />
+    <Compile Include="src\MainForm.Performance.cs" />
+    <Compile Include="src\PerformanceDialogs.cs" />
+    <Compile Include="src\MainForm.Layout.cs" />
+    <Compile Include="src\MainForm.Interactions.cs" />
+    <Compile Include="src\IconInteractions.cs" />
+    <Compile Include="src\CpuTargetTile.cs" />
+    <Compile Include="src\AppInfoPopup.cs" />
+    <Compile Include="src\AppDragPreview.cs" />
+    <Compile Include="src\DesktopDragImage.cs" />
+    <Compile Include="src\LayeredDragSurface.cs" />
+    <Compile Include="src\CpuMaskDialog.cs" />
+    <Compile Include="src\DialogUi.cs" />
+    <Compile Include="src\Schemes.cs" />
+    <Compile Include="src\SchemeDialogs.cs" />
+    <Compile Include="src\ApplicationGroups.cs" />
+    <Compile Include="src\ApplicationIconGroups.cs" />
+    <Compile Include="src\IconSimilarity.cs" />
+    <Compile Include="src\ApplicationOrdering.cs" />
+    <Compile Include="src\UiControls.cs" />
+    <Compile Include="src\ModeSwitch.cs" />
+    <Compile Include="src\UiGlyphs.cs" />
+    <Compile Include="src\AppIconTile.cs" />
+    <Compile Include="src\ProcessVisuals.cs" />
+    <Compile Include="src\RoundedLogoPack.cs" />
+    <Compile Include="src\IconAppearance.cs" />
+    <Compile Include="src\CpuGroupViews.cs" />
+    <Compile Include="src\CpuAssignmentLabel.cs" />
+    <Compile Include="src\CapsuleControls.cs" />
     <Compile Include="src\Program.cs" />
     <Compile Include="tests\SelfTests.cs" />
+    <Compile Include="tests\ApplicationOrderingTests.cs" />
+    <Compile Include="tests\IconGroupingTests.cs" />
+    <Compile Include="tests\IconSimilarityTests.cs" />
+    <Compile Include="tests\IconInteractionTests.cs" />
+    <Compile Include="tests\DesktopDragTests.cs" />
+    <Compile Include="tests\LogoStyleTests.cs" />
+    <Compile Include="tests\IconAppearanceTests.cs" />
+    <Compile Include="tests\SchemeTests.cs" />
+    <Compile Include="tests\ManualSchemeSaveTests.cs" />
+    <Compile Include="tests\GameSchemeRuleTests.cs" />
+    <Compile Include="tests\UnifiedViewTests.cs" />
+    <Compile Include="tests\TrayRuleTests.cs" />
+    <Compile Include="tests\PerformanceTests.cs" />
+    <Compile Include="tests\StartupAutomationTests.cs" />
+    <Compile Include="tests\CpuAssignmentLabelTests.cs" />
+    <Compile Include="tests\CapsuleControlsTests.cs" />
+    <Compile Include="tests\CpuPickerTests.cs" />
+    <Compile Include="tests\CoreEditTests.cs" />
+    <Compile Include="tests\DragGestureTests.cs" />
+    <Compile Include="tests\AutomaticDefaultsTests.cs" />
+    <Compile Include="tests\IntelHybridTests.cs" />
     <None Include="app.manifest" />
     <None Include="App.config" />
+    <EmbeddedResource Include="assets\icons\rounded-logos-v1.png">
+      <LogicalName>CoreAllocator.Assets.RoundedLogos.png</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
