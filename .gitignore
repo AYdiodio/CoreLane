@@ -1,6 +1,6 @@
 bin/
 obj/
-dist/data/
+/dist/
 test-output/
 *.user
 *.suo
