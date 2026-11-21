@@ -10,9 +10,12 @@
 
 ## 下载安装
 
-**当前发布版本为 v0.13.16。** 支持 Windows 11 x64，需 .NET Framework 4.8。下载便携版后，解压到有写入权限的文件夹，再双击 `CoreLane.v0.13.16.exe`。升级时先退出旧版，并保留程序旁的 `data/` 文件夹。
+**当前发布版本为 v0.13.16。** 支持 Windows 11 x64，需 .NET Framework 4.8。
 
-[下载 CoreLane v0.13.16（Windows x64 ZIP）](https://github.com/AYdiodio/CoreLane/releases/download/v0.13.16/CoreLane-v0.13.16-win-x64.zip) · [查看最新发布](https://github.com/AYdiodio/CoreLane/releases/latest)
+- **安装版** · 双击运行安装程序，可选择安装位置和是否创建桌面快捷方式。升级时先退出旧版，再安装到原目录。卸载请使用 CoreLane 内的「⋯ → 卸载」。[下载 Windows x64 安装程序（EXE）](https://github.com/AYdiodio/CoreLane/releases/download/v0.13.16/CoreLane-v0.13.16-win-x64-Setup.exe)
+- **便携版** · 解压到有写入权限的文件夹后，双击 `CoreLane.v0.13.16.exe`。从便携版迁移到安装版时，先退出旧版，再将旧版旁的 `data/` 复制到安装目录，然后打开新版。[下载 Windows x64 便携版（ZIP）](https://github.com/AYdiodio/CoreLane/releases/download/v0.13.16/CoreLane-v0.13.16-win-x64.zip)
+
+[查看最新发布](https://github.com/AYdiodio/CoreLane/releases/latest)
 
 ## 快速上手
 
@@ -70,6 +73,8 @@ cd CoreLane
 ## 开发与测试
 
 使用 C#、WinForms 和 .NET Framework 4.8。`Build.cmd` 构建，`Test.cmd` 构建并运行回归测试。报告位于 `test-output/self-test.txt`。关于测试覆盖和界面约定，见 [验证记录](VALIDATION.md)及[界面约定](UI_GUIDELINES.md)。
+
+构建安装包时，将简体中文消息文件 `ChineseSimplified.isl` 放入 Inno Setup 的 `Languages` 目录。先用 `build.ps1` 构建程序，再用 `build-installer.ps1` 的 `-CompilerPath` 和 `-ExecutablePath` 指定 `ISCC.exe` 和构建出的 CoreLane 程序。安装包输出到 `dist/publish-v<版本>/`。[Inno Setup 6.7.4 简体中文消息文件](https://github.com/jrsoftware/issrc/blob/is-6_7_4/Files/Languages/Unofficial/ChineseSimplified.isl)
 
 ## 反馈
 
