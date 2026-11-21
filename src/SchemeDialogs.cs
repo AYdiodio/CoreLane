@@ -190,7 +190,7 @@ namespace CoreAllocator
                 IntelHybridInfo hybrid = IntelHybridInfo.Detect(topology);
                 string label = useCpuSets ? "CPU 集" : hybrid.Recognized && mask == hybrid.MaskFor(0, true) ? "仅大核（P 核）" :
                     CpuSelectionGroup.Describe(mask, CpuSelectionGroup.FromTopology(topology));
-                choice = new MaskChoice { Mask = mask, UseCpuSets = useCpuSets, Text = label + " · CPU " + Masks.Format(mask) };
+                choice = new MaskChoice { Mask = mask, UseCpuSets = useCpuSets, Text = mask == 0 ? "保持硬亲和性" : label + " · CPU " + Masks.Format(mask) };
                 choices.Add(choice);
             }
             return choice.Text;
@@ -232,8 +232,10 @@ namespace CoreAllocator
         private void AddRuleRow(SavedApplication app, bool enabled, ulong mask, bool offline, SchemeRule saved = null)
         {
             int index = rules.Rows.Add(enabled, app.Name + (offline ? "（未运行）" : ""), Choice(mask, saved != null && saved.UseCpuSets));
-            rules.Rows[index].Tag = new SchemeRule { Application = app, ExactPaths = saved != null && saved.ExactPaths };
-            rules.Rows[index].Cells["App"].ToolTipText = string.Join("\r\n", app.Paths);
+            rules.Rows[index].Tag = new SchemeRule { Application = app, ExactPaths = saved != null && saved.ExactPaths,
+                CpuSetsHex = saved == null ? null : saved.CpuSetsHex };
+            rules.Rows[index].Cells["App"].ToolTipText = (saved != null && saved.CpuSets.HasValue ?
+                ManualSchemeRules.DescribeCpu(saved.Mask, false, saved.CpuSets, null) + "\r\n" : "") + string.Join("\r\n", app.Paths);
         }
         private bool SaveScheme()
         {
@@ -247,12 +249,17 @@ namespace CoreAllocator
                     {
                         MaskChoice target = choices.FirstOrDefault(c => c.Text == Convert.ToString(row.Cells["Cpu"].Value));
                         if (target == null) throw new InvalidOperationException("请为勾选的应用选择 CPU 范围。");
-                        Masks.Validate(target.Mask, topology.Available);
                         var previous = (SchemeRule)row.Tag;
+                        string cpuSets = target.UseCpuSets ? null : previous.CpuSetsHex;
+                        if (target.Mask != 0 || cpuSets == null) Masks.Validate(target.Mask, topology.Available);
+                        if (cpuSets != null && target.Mask != 0 && (previous.CpuSets.Value & ~target.Mask) != 0)
+                            throw new InvalidOperationException("所选硬亲和性不能包含已保存的默认 CPU 集。请选择包含该 CPU 集的范围。");
                         saved.Rules.Add(new SchemeRule { Application = previous.Application, MaskHex = target.Mask.ToString("X16"),
-                            ExactPaths = previous.ExactPaths || target.UseCpuSets, UseCpuSets = target.UseCpuSets });
+                            ExactPaths = previous.ExactPaths || target.UseCpuSets, UseCpuSets = target.UseCpuSets, CpuSetsHex = cpuSets });
                     }
-                if (saved.Rules.Count == 0 && id != "game") throw new InvalidOperationException("请至少勾选一个应用并设置 CPU 范围。");
+                PerformanceProfile performance = store.Read().PerformanceFor(id);
+                if (saved.Rules.Count == 0 && id != "game" && (performance == null || !performance.Rules.Any(rule => rule.Priority != 0)))
+                    throw new InvalidOperationException("请至少勾选一个应用并设置 CPU 范围。");
                 store.Update(delegate(SchemeData data) { if (id == "game") data.GameOverrides = saved; else { data.Schemes.RemoveAll(s => s.Id == id); data.Schemes.Add(saved); } }); ReloadSchemes(id); note.Text = "已保存“" + saved.Name + "”。尚未启用，不会修改当前分配。"; return true;
             }
             catch (Exception error) { AppMessageBox.Show(this, Native.Explain(error), "无法保存方案", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }

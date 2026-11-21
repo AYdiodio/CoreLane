@@ -48,7 +48,10 @@ namespace CoreAllocator
         [DataMember] public string MaskHex;
         [DataMember(EmitDefaultValue = false)] public bool UseCpuSets;
         [DataMember(EmitDefaultValue = false)] public bool ExactPaths;
+        [DataMember(EmitDefaultValue = false)] public string CpuSetsHex;
         internal ulong Mask { get { return ulong.Parse(MaskHex, NumberStyles.HexNumber, CultureInfo.InvariantCulture); } }
+        internal ulong? CpuSets { get { return CpuSetsHex == null ? (ulong?)null : ulong.Parse(CpuSetsHex, NumberStyles.HexNumber, CultureInfo.InvariantCulture); } }
+        internal uint CapturedPriority;
     }
     [DataContract]
     internal sealed class SavedScheme
@@ -97,7 +100,8 @@ namespace CoreAllocator
         {
             SchemeData next = Clone(data);
             change(next);
-            if (ContainsExactRules(next)) next.Version = 4;
+            if (HasRules(next, rule => rule.CpuSetsHex != null)) next.Version = 5;
+            else if (next.Version < 4 && ContainsExactRules(next)) next.Version = 4;
             else if (next.Performance != null && next.Version < 3) next.Version = 3;
             else if (next.GameOverrides != null && next.Version < 2) next.Version = 2;
             Validate(next);
@@ -136,7 +140,7 @@ namespace CoreAllocator
         }
         private static void Validate(SchemeData value)
         {
-            if (value == null || value.Version < 1 || value.Version > 4 || value.Games == null || value.Schemes == null ||
+            if (value == null || value.Version < 1 || value.Version > 5 || value.Games == null || value.Schemes == null ||
                 value.Version == 1 && value.GameOverrides != null || value.Version < 3 && value.Performance != null)
                 throw new InvalidDataException("方案版本或内容无效。");
             if (value.LastSelectedSchemeId != null && (string.IsNullOrWhiteSpace(value.LastSelectedSchemeId) || value.LastSelectedSchemeId.Length > 256))
@@ -174,20 +178,27 @@ namespace CoreAllocator
                 }
             }
             if (value.Version < 4 && ContainsExactRules(value)) throw new InvalidDataException("方案版本不支持按路径分配或 CPU 集。");
+            if (value.Version < 5 && HasRules(value, rule => rule.CpuSetsHex != null)) throw new InvalidDataException("方案版本不支持同时保存硬亲和性和默认 CPU 集。");
         }
         private static bool ContainsExactRules(SchemeData data)
         {
+            return HasRules(data, rule => rule.ExactPaths || rule.UseCpuSets);
+        }
+        private static bool HasRules(SchemeData data, Func<SchemeRule, bool> predicate)
+        {
             return data.Schemes.Concat(new[] { data.GameOverrides }).Any(scheme => scheme != null && scheme.Rules != null &&
-                scheme.Rules.Any(rule => rule != null && (rule.ExactPaths || rule.UseCpuSets)));
+                scheme.Rules.Any(rule => rule != null && predicate(rule)));
         }
         private static void ValidateRules(SavedScheme scheme)
         {
             HashSet<string> paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (SchemeRule rule in scheme.Rules)
             {
-                if (rule == null || rule.Mask == 0) throw new InvalidDataException("方案 CPU 范围无效。");
+                if (rule == null || rule.Mask == 0 && !rule.CpuSets.HasValue) throw new InvalidDataException("方案 CPU 范围无效。");
                 ValidateApplication(rule.Application);
                 if (rule.UseCpuSets && !rule.ExactPaths) throw new InvalidDataException("CPU 集规则必须匹配已确认的完整路径。");
+                if (rule.CpuSets.HasValue && (!rule.ExactPaths || rule.UseCpuSets || rule.Mask != 0 && (rule.CpuSets.Value & ~rule.Mask) != 0))
+                    throw new InvalidDataException("方案中的默认 CPU 集与硬亲和性不兼容。");
                 if (rule.Application.Paths.Any(p => !paths.Add(p))) throw new InvalidDataException("同一方案内不能重复设置一个程序。");
             }
         }
@@ -202,6 +213,7 @@ namespace CoreAllocator
         internal ProcessRow Process;
         internal ulong Mask;
         internal bool UseCpuSets;
+        internal ulong? CpuSets;
     }
     // Pure planning: every actual write still passes through AffinityService's owner/creation/permission checks.
     internal sealed class AutomationSession
@@ -229,9 +241,11 @@ namespace CoreAllocator
                     SchemeRule exact = matches.FirstOrDefault(rule => rule.ExactPaths && rule.Application.Paths.Contains(row.ExecutablePath, StringComparer.OrdinalIgnoreCase));
                     if (exact == null && !fallback.HasValue) fallback = GroupTarget(matches, app, data, topology);
                     ulong mask = exact == null ? fallback.Value : exact.Mask;
-                    if (mask == 0) continue;
-                    Masks.Validate(mask, topology.Available);
-                    AutomaticTarget target = new AutomaticTarget { Process = row, Mask = mask, UseCpuSets = exact != null && exact.UseCpuSets };
+                    ulong? cpuSets = exact == null ? null : exact.CpuSets;
+                    if (mask == 0 && !cpuSets.HasValue) continue;
+                    if (mask != 0) Masks.Validate(mask, topology.Available);
+                    if (cpuSets.GetValueOrDefault() != 0) Masks.Validate(cpuSets.Value, topology.Available);
+                    AutomaticTarget target = new AutomaticTarget { Process = row, Mask = mask, UseCpuSets = exact != null && exact.UseCpuSets, CpuSets = cpuSets };
                     if (includeAttempted || !attempted.ContainsKey(AttemptKey(target))) targets.Add(target);
                 }
             }
@@ -249,7 +263,7 @@ namespace CoreAllocator
             CpuSelectionGroup group = classes[0] ? CpuSelectionGroup.GameTarget(topology) : CpuSelectionGroup.NonGameTarget(topology);
             return group == null ? 0 : group.Mask;
         }
-        private static string AttemptKey(AutomaticTarget target) { return target.Process.Key + (target.UseCpuSets ? ":set:" : ":") + target.Mask.ToString("X16"); }
+        private static string AttemptKey(AutomaticTarget target) { return target.Process.Key + (target.UseCpuSets ? ":set:" : ":") + target.Mask.ToString("X16") + ":" + target.CpuSets; }
         internal void MarkAttempted(AutomaticTarget target, OperationResult result = null) { attempted[AttemptKey(target)] = result; }
         internal string ExecutionStatus(AutomaticTarget target)
         {
@@ -259,9 +273,10 @@ namespace CoreAllocator
             if (result != null && !result.Success) return result.Win32Error == 5 ? "访问被拒绝" : "执行失败";
             ulong? current = target.UseCpuSets ? target.Process.CpuSetMask :
                 (target.Process.ReadError == null && target.Process.Mask != 0 ? (ulong?)target.Process.Mask : null);
-            if (!current.HasValue) return "无法读取当前范围";
+            if (target.Mask != 0 && !current.HasValue || target.CpuSets.HasValue && !target.Process.CpuSetMask.HasValue) return "无法读取当前范围";
             if (target.UseCpuSets && (target.Process.ReadError != null || target.Process.Mask == 0)) return "无法读取硬亲和性";
-            bool matches = current.Value == target.Mask && (!target.UseCpuSets || (target.Mask & ~target.Process.Mask) == 0);
+            bool matches = (target.Mask == 0 || current == target.Mask) && (!target.UseCpuSets || (target.Mask & ~target.Process.Mask) == 0) &&
+                (!target.CpuSets.HasValue || target.CpuSets == target.Process.CpuSetMask && (target.CpuSets.Value & ~target.Process.Mask) == 0);
             if (result == null) return matches ? "当前已符合目标" : "待执行";
             return matches ? "已生效" : "已偏离目标";
         }

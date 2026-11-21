@@ -195,7 +195,8 @@ namespace CoreAllocator
                 int textWidth = Text.Length == 0 ? 0 : TextRenderer.MeasureText(Text, Font, Size.Empty, TextFormatFlags.NoPadding).Width;
                 int badgeWidth = BadgeCount > 0 ? Math.Max((int)(24 * scale), TextRenderer.MeasureText(BadgeCount.ToString(), Font, Size.Empty, TextFormatFlags.NoPadding).Width + (int)(10 * scale)) : 0;
                 int trailing = badgeWidth > 0 ? badgeWidth + gap : TrailingCheck ? icon + gap : 0;
-                int x = Math.Max((int)(10 * scale), (Width - textWidth - icon - gap - trailing) / 2);
+                int leading = (int)(10 * scale);
+                int x = TextAlign == ContentAlignment.MiddleLeft ? leading : Math.Max(leading, (Width - textWidth - icon - gap - trailing) / 2);
                 UiGlyphs.Draw(e.Graphics, Glyph, new RectangleF(x, (Height - icon) / 2F + inset, icon, icon), text);
                 if (Text.Length != 0) TextRenderer.DrawText(e.Graphics, Text, Font, new Rectangle(x + icon + gap, (int)inset, Math.Max(1, Width - x - icon - gap - trailing - (int)(8 * scale)), Height - (int)inset), text,
                     TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);

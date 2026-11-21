@@ -10,10 +10,10 @@
 
 ## 下载安装
 
-**当前发布版本为 v0.13.16。** 支持 Windows 11 x64，需 .NET Framework 4.8。
+**当前发布版本为 v0.13.17。** 支持 Windows 11 x64，需 .NET Framework 4.8。
 
-- **安装版** · 双击运行安装程序，可选择安装位置和是否创建桌面快捷方式。升级时先退出旧版，再安装到原目录。卸载请使用 CoreLane 内的「⋯ → 卸载」。[下载 Windows x64 安装程序（EXE）](https://github.com/AYdiodio/CoreLane/releases/download/v0.13.16/CoreLane-v0.13.16-win-x64-Setup.exe)
-- **便携版** · 解压到有写入权限的文件夹后，双击 `CoreLane.v0.13.16.exe`。从便携版迁移到安装版时，先退出旧版，再将旧版旁的 `data/` 复制到安装目录，然后打开新版。[下载 Windows x64 便携版（ZIP）](https://github.com/AYdiodio/CoreLane/releases/download/v0.13.16/CoreLane-v0.13.16-win-x64.zip)
+- **安装版** · 双击运行安装程序，可选择安装位置和是否创建桌面快捷方式。升级时先退出旧版，再安装到原目录。卸载请使用 CoreLane 内的「⋯ → 卸载」。[下载 Windows x64 安装程序（EXE）](https://github.com/AYdiodio/CoreLane/releases/download/v0.13.17/CoreLane-v0.13.17-win-x64-Setup.exe)
+- **便携版** · 解压到有写入权限的文件夹后，双击 `CoreLane.v0.13.17.exe`。从便携版迁移到安装版时，先退出旧版，再将旧版旁的 `data/` 复制到安装目录，然后打开新版。[下载 Windows x64 便携版（ZIP）](https://github.com/AYdiodio/CoreLane/releases/download/v0.13.17/CoreLane-v0.13.17-win-x64.zip)
 
 [查看最新发布](https://github.com/AYdiodio/CoreLane/releases/latest)
 
@@ -32,7 +32,7 @@
 | 按组拖放 | Intel 大小核得到确认时显示 P 核和 E 核。AMD 按 Windows 提供的 L3 共享范围分组，并以 CCD 标签标注显示顺序。 |
 | 精确选核 | 在「核心分配」中逐个勾选逻辑 CPU，也可以按住鼠标划选。拖放使用硬亲和性，应用设置还可选择进程默认 CPU 集。 |
 | 调整优先级 | 在「进程优先级」中统一设置或逐个调整。托盘中的「方案优先级与后台保护」可以为指定后台应用配置临时降级。 |
-| 保存并自动应用 | 在「⋯ → 自动方案 → 保存方案」中核对本次成功的手动分配，可保存为新方案或更新已有方案。启用对应方案后，工具会处理匹配的应用及随后启动的实例。 |
+| 保存并自动应用 | 在「⋯ → 自动方案 → 保存方案」中核对当前运行应用的 CPU 分配与进程优先级，包括本次未手动调整的应用。可保存为新方案或更新已有方案，启用后对匹配的应用及后续启动的实例执行。 |
 
 ### 游戏方案
 
@@ -57,7 +57,7 @@ cd CoreLane
 .\Start.cmd
 ```
 
-第一次运行时，`Start.cmd` 会编译并打开 `dist\CoreLane.v0.13.16.exe`。需要管理员权限时，先构建一次，再运行 `StartAdmin.cmd`。如需登录 Windows 后自动启动，可从「⋯ → 开机自启动」授权。
+第一次运行时，`Start.cmd` 会编译并打开 `dist\CoreLane.v0.13.17.exe`。需要管理员权限时，先构建一次，再运行 `StartAdmin.cmd`。如需登录 Windows 后自动启动，可从「⋯ → 开机自启动」授权。
 
 ## 检查更新
 

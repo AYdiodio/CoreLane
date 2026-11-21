@@ -341,11 +341,9 @@ namespace CoreAllocator
                     else retainedAssignments.Clear();
                 }
                 catch (Exception error) { Append("无法清除保留分配，恢复未开始 · " + Native.Explain(error), Color.Firebrick); return false; }
-                sessionManualRules.Clear();
             }
             var targets = entries.Where(entry => selected == null || selected.Contains(entry.Key)).GroupBy(entry => entry.Key).ToArray();
             StopAutomationExcept("恢复调度已暂停自动方案。", new HashSet<string>(targets.Select(group => group.Key)));
-            lastManualRules.Clear();
             bool complete = true;
             RunBatch(delegate
             {
@@ -379,7 +377,6 @@ namespace CoreAllocator
         {
             ProcessRow row = processes.Find(process => process.Key == key);
             if (row == null || row.ExecutablePath == null) return;
-            ManualSchemeRules.RemovePaths(sessionManualRules, new[] { row.ExecutablePath });
             retainedAssignments.Forget(row.ExecutablePath);
         }
         private void RunBatch(Action action) { if (busy) return; CloseProcessDetails(); busy = true; UseWaitCursor = true; UpdateState(); try { action(); } finally { busy = false; UseWaitCursor = false; RefreshProcesses(); UpdateState(); } }

@@ -28,6 +28,10 @@ namespace CoreAllocator
                     var picker = ChildControls(single).OfType<CapsuleSchemePicker>().Single();
                     var name = ChildControls(single).OfType<TextBox>().Single();
                     Check(picker.Left == name.Parent.Left && picker.Width == name.Parent.Width, "destination picker and new name have the same edges");
+                    var nameLabel = ChildControls(single).OfType<Label>().Single(item => item.Text == "方案名称");
+                    Check(picker.Height == name.Parent.Height && nameLabel.Top == name.Parent.Top && nameLabel.Height == name.Parent.Height &&
+                        Math.Abs(name.Top * 2 + name.Height - picker.Height) <= 1 && nameLabel.Width >= TextRenderer.MeasureText(nameLabel.Text, nameLabel.Font).Width,
+                        "both capsules share a height and the name and label are vertically centered without wrapping");
                     Check(target.Left == list.Parent.Parent.Left && target.Width == list.Parent.Parent.Width, "the destination and preview share the same card edges");
                     Check(list.Height == list.ContentHeight && list.MaximumScroll == 0, "one rule leaves no blank card area");
                     int expanded = target.Height;
@@ -108,26 +112,49 @@ namespace CoreAllocator
                     "two exact paths keep different masks and unassigned siblings are excluded");
                 Check(session.ExecutionStatus(targets.Single(target => target.Process == b)) == "当前已符合目标", "CPU Sets rule reports actual default CPU set");
             });
+            Case("current settings: mixed instances keep common fields and updating a scheme retains unrelated rules", delegate
+            {
+                const string shared = @"C:\Fixture\Shared.exe", offline = @"C:\Other\Offline.exe";
+                var first = new ProcessRow { Pid=990001, Created=3, Name="Shared.exe", ExecutablePath=shared, Mask=3, CpuSetMask=0, Priority=PriorityLevels.Normal };
+                var second = new ProcessRow { Pid=990002, Created=3, Name="Shared.exe", ExecutablePath=shared, Mask=3, CpuSetMask=0, Priority=PriorityLevels.BelowNormal };
+                int incomplete;
+                List<SchemeRule> captured = ManualSchemeRules.CaptureCurrent(new[] { first, second }, topology, delegate { return null; }, out incomplete);
+                Check(incomplete == 1 && captured.Single().Mask == 3 && captured.Single().CpuSets == 0 && captured.Single().CapturedPriority == 0,
+                    "multiple live processes of one executable can preserve matching CPU settings without guessing a priority");
+                string file = Path.Combine(working, "current-merge", "schemes.json");
+                var store = new SchemeStore(file);
+                var existing = rule(offline, 8);
+                existing.CapturedPriority = PriorityLevels.AboveNormal;
+                string id = ManualSchemeRules.Save(store, topology, new[] { existing }, null, "保留离线规则");
+                ManualSchemeRules.Save(store, topology, captured, id, "");
+                SchemeData data = new SchemeStore(file).Read();
+                Check(data.Schemes.Single().Rules.Any(item => item.Application.Paths.Contains(offline) && item.Mask == 8) &&
+                    data.PerformanceFor(id).Rules.Single().Path == offline && data.PerformanceFor(id).Rules.Single().Priority == PriorityLevels.AboveNormal,
+                    "the matching running rules are updated while offline affinity and priority remain intact");
+            });
             Topology actual=Topology.Read(); if(!actual.CanAssign) return;
-            Case("live manual save: only latest successful batch, modal cancel and save never enable; saved rule applies to a new instance", delegate
+            Case("live current settings: fresh reads without manual changes, cancel is inert, future instance receives all three settings", delegate
             {
                 string folder=Path.Combine(working,"manual-save-live"); Directory.CreateDirectory(folder);
                 string executable=Path.Combine(folder,"manual-unique.exe"); File.Copy(typeof(SelfTests).Assembly.Location,executable); File.Copy(typeof(SelfTests).Assembly.Location+".config",executable+".config");
                 using(Process child=Process.Start(new ProcessStartInfo{FileName=executable,Arguments="--test-worker",UseShellExecute=false,CreateNoWindow=true}))
                 {
                     AffinityService service=new AffinityService(actual,new SnapshotStore(Path.Combine(folder,"original.json")));
-                    SchemeStore store=new SchemeStore(Path.Combine(folder,"schemes.json")); ulong before=Read(child.Id), mask=1UL<<Masks.Bits(actual.Available).First();
+                    SchemeStore store=new SchemeStore(Path.Combine(folder,"schemes.json"));
+                    ulong first=1UL<<Masks.Bits(actual.Available).First(), mask=actual.Available;
+                    var cpuSets = new CpuSetService(actual, folder);
+                    var priorities = new PriorityService(folder);
                     try
                     {
                         int missing; ProcessRow live=service.Processes(out missing).Single(p=>p.Pid==child.Id);
-                        ProcessRow failed=new ProcessRow{Pid=999999,Created=1,Name="failed.exe",ExecutablePath=@"C:\ManualFixture\failed.exe"};
+                        Check(cpuSets.Apply(live, first).Success && priorities.Apply(live, PriorityLevels.BelowNormal).Success,
+                            "the worker is changed outside the form before capture");
                         using(MainForm form=new MainForm(service))
                         using(System.Windows.Forms.Timer timer=new System.Windows.Forms.Timer{Interval=30})
                         {
                             typeof(MainForm).GetField("schemeStore",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(form,store);
-                            StartupInvoke(form,"ApplyTargets",new[]{live,failed},mask,"test");
-                            List<SchemeRule> draft=(List<SchemeRule>)StartupField(form,"lastManualRules");
-                            Check(draft.Count==1 && draft.Single().Application.Paths.Single()==executable && Read(child.Id)==mask,"failed member excluded; confirmed success captured");
+                            typeof(MainForm).GetField("cpuSetService",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(form,cpuSets);
+                            typeof(MainForm).GetField("priorityService",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(form,priorities);
                             bool commit=false,visited=false;
                             timer.Tick+=delegate {
                                 ManualSchemeSaveDialog dialog=Application.OpenForms.OfType<ManualSchemeSaveDialog>().FirstOrDefault(); if(dialog==null)return;
@@ -143,20 +170,32 @@ namespace CoreAllocator
                             Check(visited && store.Read().Schemes.Count==0 && Read(child.Id)==mask,"cancel does not save or assign");
                             commit=true; visited=false; timer.Start(); StartupInvoke(form,"OpenSaveSessionScheme");
                             Check(visited && store.Read().Schemes.Count==1 && StartupField(form,"automation")==null && store.StartupSchemeId=="game" && Read(child.Id)==mask,"save leaves manual view and automation paused");
+                            SchemeData data = new SchemeStore(Path.Combine(folder,"schemes.json")).Read();
+                            string id = data.Schemes.Single().Id;
+                            SchemeRule saved = data.Schemes.Single().Rules.Single(ruleItem => ruleItem.Application.Paths.Contains(executable));
+                            Check(data.Version == 5 && saved.Mask == mask && saved.CpuSets == first &&
+                                data.PerformanceFor(id).Rules.Single(item => item.Path == executable).Priority == PriorityLevels.BelowNormal,
+                                "the saved file contains hard affinity, default CPU sets and priority from the fresh read");
                             using(Process later=Process.Start(new ProcessStartInfo{FileName=executable,Arguments="--test-worker",UseShellExecute=false,CreateNoWindow=true}))
                             {
                                 try {
                                     ProcessRow next=service.Processes(out missing).Single(p=>p.Pid==later.Id);
-                                    AutomationSession session=new AutomationSession(store.Read().Schemes.Single().Id,new ProcessRow[0]);
-                                    AutomaticTarget target=session.Plan(ApplicationGroup.Build(new[]{next},delegate{return null;}),store.Read(),actual).Single();
-                                    Check(target.Mask==mask && service.Apply(target.Process,target.Mask).Success && Read(later.Id)==mask,"future instance receives saved rule when explicitly executed");
+                                    if (first != mask) Check(service.Apply(next, first).Success, "prepare a narrower affinity for the future instance");
+                                    next=service.Processes(out missing).Single(p=>p.Pid==later.Id);
+                                    AutomationSession session=new AutomationSession(id,new ProcessRow[0]);
+                                    typeof(MainForm).GetField("automation",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(form,session);
+                                    var fixtureRows = new List<ProcessRow> { next };
+                                    AutomaticTarget target=session.Plan(ApplicationGroup.Build(fixtureRows,delegate{return null;}),data,actual).Single();
+                                    StartupInvoke(form,"ExecuteAutomaticTarget",target);
+                                    StartupInvoke(form,"UpdatePerformance",data.PerformanceFor(id),fixtureRows,true);
+                                    next=service.Processes(out missing).Single(p=>p.Pid==later.Id);
+                                    Check(next.Mask==mask && next.CpuSetMask==first && next.Priority==PriorityLevels.BelowNormal,
+                                        "a new instance receives the stored hard mask, default CPU set and priority");
+                                    Check(cpuSets.Apply(next, 0, allowClear: true).Success && service.Processes(out missing).Single(p=>p.Pid==later.Id).CpuSetMask==0,
+                                        "a saved zero mask can explicitly clear a default CPU set with verification");
+                                    typeof(MainForm).GetField("automation",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(form,null);
                                 } finally { foreach(OriginalAffinity record in service.Store.Items.Where(r=>r.Pid==later.Id).ToArray())service.Restore(record); if(!later.HasExited){later.Kill();later.WaitForExit();} }
                             }
-                            StartupInvoke(form,"ApplyTargets",new[]{failed},mask,"failed batch");
-                            Check(((List<SchemeRule>)StartupField(form,"lastManualRules")).Count==0,"new failed batch cannot export stale success");
-                            Check(((List<SchemeRule>)StartupField(form,"sessionManualRules")).Single().Mask == mask,"a later failure cannot erase successful work from the session");
-                            StartupInvoke(form,"ApplyTargets",new[]{live},mask,"again"); StartupInvoke(form,"Restore",true);
-                            Check(Read(child.Id)==actual.Available && ((List<SchemeRule>)StartupField(form,"lastManualRules")).Count==0,"restore clears draft and opens all available CPUs");
                         }
                     }
                     finally { foreach(OriginalAffinity record in service.Store.Items.ToArray())service.Restore(record); if(!child.HasExited){child.Kill();child.WaitForExit();} }

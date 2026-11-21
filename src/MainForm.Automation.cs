@@ -65,7 +65,7 @@ namespace CoreAllocator
             {
                 OpenSaveSessionScheme();
                 BeginInvoke((Action)ShowAutomationMenu);
-            }) { Enabled = sessionManualRules.Count > 0 });
+            }) { Enabled = service.Topology.CanAssign });
             if (retainedAssignments.Active)
                 automationMenu.Items.Add(new GlyphMenuItem("暂停保留的分配", UiGlyph.Pause, delegate { PauseRetainedAssignments(); BeginInvoke((Action)ShowAutomationMenu); }));
             bool active = automation != null;
@@ -223,10 +223,29 @@ namespace CoreAllocator
         }
         private void ExecuteAutomaticTarget(AutomaticTarget target)
         {
-            OperationResult result = !target.UseCpuSets ? service.Apply(target.Process, target.Mask) : cpuSetService != null ? cpuSetService.Apply(target.Process, target.Mask) :
-                new OperationResult { Pid = target.Process.Pid, Name = target.Process.Name, Message = "CPU 集不可用，请检查 CPU 集恢复记录。" };
+            ProcessRow row = target.Process;
+            if (target.CpuSets.HasValue && automation.ExecutionStatus(target) == "当前已符合目标")
+            {
+                automation.MarkAttempted(target);
+                return;
+            }
+            OperationResult result = null;
+            if (target.UseCpuSets) result = ApplyAutomaticCpuSets(row, target.Mask);
+            else
+            {
+                if (target.Mask != 0 && (row.ReadError != null || row.Mask != target.Mask || !target.CpuSets.HasValue))
+                    result = service.Apply(row, target.Mask);
+                if ((result == null || result.Success) && target.CpuSets.HasValue)
+                    result = ApplyAutomaticCpuSets(row, target.CpuSets.Value);
+            }
             automation.MarkAttempted(target, result);
-            Record(result, target.Process.Key);
+            if (result != null) Record(result, row.Key);
+        }
+
+        private OperationResult ApplyAutomaticCpuSets(ProcessRow row, ulong mask)
+        {
+            return cpuSetService != null ? cpuSetService.Apply(row, mask, allowClear: true) :
+                new OperationResult { Pid = row.Pid, Name = row.Name, Message = "CPU 集不可用，请检查 CPU 集恢复记录。" };
         }
 
         private string DescribeApplications(IEnumerable<ApplicationGroup> apps)
@@ -265,8 +284,8 @@ namespace CoreAllocator
             catch (InvalidOperationException error) { return "规则状态：" + error.Message; }
             catch (ArgumentException error) { return "规则状态：" + error.Message; }
             if (targets.Count == 0) return "方案目标：无匹配规则";
-            string description = "方案目标：" + string.Join(" / ", targets.Select(target => target.UseCpuSets ? "CPU 集 · " + Masks.Format(target.Mask) :
-                CpuSelectionGroup.Describe(target.Mask, cpuGroups) + " · CPU " + Masks.Format(target.Mask)).Distinct());
+            string description = "方案目标：" + string.Join(" / ", targets.Select(target =>
+                ManualSchemeRules.DescribeCpu(target.Mask, target.UseCpuSets, target.CpuSets, cpuGroups)).Distinct());
             description += "\r\n规则状态：" + string.Join("，", targets.GroupBy(session.ExecutionStatus).Select(group => group.Key + " " + group.Count() + " 个"));
             return description;
         }

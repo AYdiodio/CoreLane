@@ -212,6 +212,7 @@ namespace CoreAllocator
     internal sealed class CapsuleSchemePicker : Button
     {
         internal readonly List<object> Items = new List<object>();
+        internal bool AlignOptionsLeft;
         private int selectedIndex = -1;
         private CapsuleDropDown popup;
         private readonly List<CapsuleDropDown> retired = new List<CapsuleDropDown>();
@@ -256,7 +257,8 @@ namespace CoreAllocator
                 int choice = i;
                 CapsuleMenuOption option = new CapsuleMenuOption { Text = Items[i].ToString(), Font = Font, Width = Math.Max(1, content.ContentWidth - pad * 2), Height = rowHeight, Location = new Point(pad, pad + i * (rowHeight + gap)),
                     Margin = new Padding(0, 0, 0, gap), Tone = ButtonTone.Purple, SurfaceButton = true, Chosen = i == selectedIndex, TrailingCheck = i == selectedIndex,
-                    Glyph = i == 0 ? UiGlyph.Sparkles : UiGlyph.Adjust, AccessibleRole = AccessibleRole.MenuItem, AccessibleDescription = i == selectedIndex ? "当前已选方案" : "选择后仍须启用方案" };
+                    Glyph = i == 0 ? UiGlyph.Sparkles : UiGlyph.Adjust, AccessibleRole = AccessibleRole.MenuItem, AccessibleDescription = i == selectedIndex ? "当前已选方案" : "选择后仍须启用方案",
+                    TextAlign = AlignOptionsLeft ? ContentAlignment.MiddleLeft : ContentAlignment.MiddleCenter };
                 option.Click += delegate { SelectedIndex = choice; if (popup != null) popup.Close(); Focus(); };
                 option.KeyDown += delegate(object sender, KeyEventArgs args)
                 {

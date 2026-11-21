@@ -59,7 +59,7 @@ namespace CoreAllocator
             AddTrayAction("管理方案与游戏分类…", UiGlyph.Adjust, delegate { OpenFromTray(); ManageSchemes(); }).Enabled &= schemeStore != null;
             if (protection.DropDownItems.Count > 0) trayMenu.Items.Add(protection);
             else protection.Dispose();
-            AddTrayAction("保存本次分配到方案…", UiGlyph.Plus, delegate { OpenFromTray(); OpenSaveManualScheme(); }).Enabled &= schemeStore != null && lastManualRules.Count > 0;
+            AddTrayAction("保存方案…", UiGlyph.Plus, delegate { OpenFromTray(); OpenSaveSessionScheme(); }).Enabled &= schemeStore != null && service.Topology.CanAssign;
             AddTrayAction("恢复原设置…", UiGlyph.Undo, delegate { OpenFromTray(); OpenRestoreSettings(); }).Enabled &= CanRestoreScheduling;
             trayMenu.Items.Add(new CapsuleMenuSeparator());
             AddTrayAction("退出 " + Program.DisplayName, UiGlyph.Arrow, delegate

@@ -211,11 +211,9 @@ namespace CoreAllocator
             ProcessRow[] targets = selected.GroupBy(p => p.Key).Select(g => g.First()).ToArray(); if (targets.Length == 0) return;
             selectedMask = mask;
             StopAutomation("手动分配已暂停自动方案。");
-            lastManualRules = new List<SchemeRule>();
             ProcessRow blockedGame = null;
             RunBatch(delegate
             {
-                List<ProcessRow> successful = new List<ProcessRow>();
                 int success = 0, failed = 0, skipped = 0;
                 OperationResult firstFailure = null;
                 foreach (ProcessRow row in targets)
@@ -224,7 +222,6 @@ namespace CoreAllocator
                     Record(result, row.Key);
                     if (result.Success && !result.Skipped)
                     {
-                        successful.Add(row);
                         retainedAssignments.RememberCpu(row, mask, useCpuSets);
                     }
                     if (!useCpuSets && result.AffinityWriteDenied && SteamLaunchAffinity.IsApex(row)) blockedGame = row;
@@ -232,8 +229,6 @@ namespace CoreAllocator
                     else if (result.Success) success++;
                     else { failed++; if (firstFailure == null) firstFailure = result; }
                 }
-                if (!useCpuSets) lastManualRules = ManualSchemeRules.Capture(successful, mask, visuals.Get);
-                ManualSchemeRules.Merge(sessionManualRules, ManualSchemeRules.Capture(successful, mask, visuals.Get, useCpuSets, true));
                 string heading = useCpuSets ? "默认 CPU 集 " + Masks.Format(mask) : targetName;
                 string summary = heading + " · 成功 " + success + " 个进程" +
                     (failed == 0 ? "" : " · 失败 " + failed) + (skipped == 0 ? "" : " · 跳过 " + skipped);

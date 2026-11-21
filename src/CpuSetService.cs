@@ -115,12 +115,15 @@ namespace CoreAllocator
         }
 
         internal OperationResult Apply(ProcessRow row, ulong requested)
+        { return Apply(row, requested, allowClear: false); }
+
+        internal OperationResult Apply(ProcessRow row, ulong requested, bool allowClear)
         {
             var result = new OperationResult { Pid = row.Pid, Name = row.Name };
             try
             {
                 EnsureSupported();
-                Masks.Validate(requested, topology.Available);
+                if (requested != 0 || !allowClear) Masks.Validate(requested, topology.Available);
                 using (ProcessHandle process = Native.OpenForCpuSets(row.Pid))
                 {
                     Native.ValidateTarget(process, row.Pid, row.Created);
@@ -145,14 +148,15 @@ namespace CoreAllocator
                                 OwnerSid = WindowsIdentity.GetCurrent().User.Value, Ids = originalIds, Mask = prior });
                             Commit(next);
                         }
-                        CpuSetNative.SetMask(process, requested);
+                        if (requested == 0) CpuSetNative.RestoreIds(process, new uint[0]);
+                        else CpuSetNative.SetMask(process, requested);
                     }
                     if (CpuSetNative.ReadMask(process) != requested || Native.IsExited(process))
                         throw new InvalidOperationException("CPU 集回读与请求不一致或进程已退出。");
                     if ((requested & ~Native.Affinity(process, out system)) != 0)
                         throw new InvalidOperationException("CPU 集已写入，但硬亲和性在操作期间改变了。请查看当前范围。");
                     result.Success = true;
-                    result.Message = "默认 CPU 集已确认：CPU " + Masks.Format(requested) + "。";
+                    result.Message = requested == 0 ? "已确认未设置默认 CPU 集。" : "默认 CPU 集已确认：CPU " + Masks.Format(requested) + "。";
                 }
             }
             catch (Exception error) { SetFailure(result, error); }

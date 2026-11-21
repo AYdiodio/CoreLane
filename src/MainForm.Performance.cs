@@ -80,6 +80,7 @@ namespace CoreAllocator
                     uint desired;
                     if (row.ExecutablePath == null || !rules.TryGetValue(row.ExecutablePath, out desired) ||
                         guarded.Contains(row.Key) || !priorityAttempts.Add(row.Key)) continue;
+                    if (row.Priority == desired) continue;
                     OperationResult result = priorityService.Apply(row, desired);
                     if (result.Success) row.Priority = desired;
                     Record(result, row.Key);

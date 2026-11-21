@@ -1,4 +1,4 @@
-﻿param([string]$OutputName = 'CoreLane.v0.13.16.exe')
+param([string]$OutputName = 'CoreLane.v0.13.17.exe')
 $ErrorActionPreference = 'Stop'
 if ([System.IO.Path]::GetFileName($OutputName) -ne $OutputName -or -not $OutputName.EndsWith('.exe')) { throw 'OutputName must be an executable filename.' }
 $projectRoot = $PSScriptRoot
