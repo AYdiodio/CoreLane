@@ -1,17 +1,23 @@
 <p align="center"><img src="docs/media/corelane-icon.png" width="76" height="76" alt="CoreLane 图标"></p>
 <h1 align="center">CoreLane</h1>
 <p align="center">在 Windows 上，拖动应用图标就能分配 CPU 核心。</p>
-<p align="center"><a href="#快速上手">快速上手</a> · <a href="#从源码运行">从源码运行</a> · <a href="#反馈">反馈</a></p>
+<p align="center"><a href="#下载安装">下载安装</a> · <a href="#快速上手">快速上手</a> · <a href="#从源码运行">从源码运行</a> · <a href="#反馈">反馈</a></p>
 
 同时开着游戏、语音和录屏时，如果想让它们使用不同的 CPU 核心，可以在 CoreLane 里直接拖动应用图标。也可以双击图标精确选核、调整进程优先级，或把已经试好的分配保存下来，下次启用方案时自动执行。
 
 <p align="center"><img src="docs/media/corelane-overview.png" width="740" alt="CoreLane 主界面。应用图标下方显示 CPU 分配，底部的两张 CPU 卡片可以接收拖放。"></p>
 <p align="center"><sub>v0.13.13 的界面，使用示例进程和 CPU 分配。</sub></p>
 
+## 下载安装
+
+**当前发布版本为 v0.13.16。** 支持 Windows 11 x64，需 .NET Framework 4.8。下载便携版后，解压到有写入权限的文件夹，再双击 `CoreLane.v0.13.16.exe`。升级时先退出旧版，并保留程序旁的 `data/` 文件夹。
+
+[下载 CoreLane v0.13.16（Windows x64 ZIP）](https://github.com/AYdiodio/CoreLane/releases/download/v0.13.16/CoreLane-v0.13.16-win-x64.zip) · [查看最新发布](https://github.com/AYdiodio/CoreLane/releases/latest)
+
 ## 快速上手
 
 1. 打开一个适合测试的应用，例如记事本。鼠标移到放大镜上，输入应用名找到它。悬停在应用图标上可以先看当前分配。
-2. 把应用图标拖到下方的 CPU 卡片上。要一起分配多个应用，可以在空白处框选，也可以按住 Ctrl 逐个选中。松手后看图标下方的分配标签，操作结果会显示在窗口底部。
+2. 把应用图标拖到下方的 CPU 卡片上。要一起分配多个应用，可以在空白处框选，也可以按住 Ctrl 单击各个图标。按住 Ctrl 再点一次可取消该图标的选择。松手后看图标下方的分配标签，操作结果会显示在窗口底部。
 3. 想精确指定某几个逻辑 CPU，双击应用图标，展开「核心分配」，勾选后点击「应用设置」。同一窗口也可以调整进程优先级。
 4. 试完后，保持应用选中，打开「⋯ → 恢复原设置 → 恢复已选」，把该应用的调度交还给 Windows。
 
@@ -23,7 +29,7 @@
 | 按组拖放 | Intel 大小核得到确认时显示 P 核和 E 核。AMD 按 Windows 提供的 L3 共享范围分组，并以 CCD 标签标注显示顺序。 |
 | 精确选核 | 在「核心分配」中逐个勾选逻辑 CPU，也可以按住鼠标划选。拖放使用硬亲和性，应用设置还可选择进程默认 CPU 集。 |
 | 调整优先级 | 在「进程优先级」中统一设置或逐个调整。托盘中的「方案优先级与后台保护」可以为指定后台应用配置临时降级。 |
-| 保存并自动应用 | 在「⋯ → 自动方案 → 保存方案」中保存本次使用期间成功的手动分配。选择并启用对应方案后，工具会处理匹配的应用及随后启动的实例。 |
+| 保存并自动应用 | 在「⋯ → 自动方案 → 保存方案」中核对本次成功的手动分配，可保存为新方案或更新已有方案。启用对应方案后，工具会处理匹配的应用及随后启动的实例。 |
 
 ### 游戏方案
 
@@ -40,7 +46,7 @@
 
 ## 从源码运行
 
-**需要 Windows 11 x64 和 .NET Framework 4.8。** 使用 Windows 自带的 C# 编译器。当前版本为 **v0.13.13**。GitHub Releases 上目前可见的是早期预发行版，要体验本页功能请从当前源码构建。
+**需要 Windows 11 x64 和 .NET Framework 4.8。** 使用 Windows 自带的 C# 编译器。
 
 ```powershell
 git clone https://github.com/AYdiodio/CoreLane.git
@@ -48,7 +54,11 @@ cd CoreLane
 .\Start.cmd
 ```
 
-第一次运行时，`Start.cmd` 会编译并打开 `dist\CoreLane.v0.13.13.exe`。需要管理员权限时，先构建一次，再运行 `StartAdmin.cmd`。如需登录 Windows 后自动启动，可从「⋯ → 开机自启动」授权。
+第一次运行时，`Start.cmd` 会编译并打开 `dist\CoreLane.v0.13.16.exe`。需要管理员权限时，先构建一次，再运行 `StartAdmin.cmd`。如需登录 Windows 后自动启动，可从「⋯ → 开机自启动」授权。
+
+## 检查更新
+
+打开「⋯ → 检查更新」，可以查看当前版本，并查询 GitHub 上的正式发布。找到新版本时，点击「打开发布页」可查看说明并下载。
 
 ## 适用范围
 

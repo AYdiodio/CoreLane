@@ -39,7 +39,7 @@ namespace CoreAllocator
             this.service = service; cpuGroups = CpuSelectionGroup.FromTopology(service.Topology);
             retainedAssignments = new RetainedAssignments(service.Store.DirectoryPath, service.Topology);
             hybrid = IntelHybridInfo.Detect(service.Topology);
-            Text = Program.DisplayName + " · v0.13.13"; Font = new Font("Microsoft YaHei", 9.75F);
+            Text = Program.DisplayName + " · " + Program.DisplayVersion; Font = new Font("Microsoft YaHei", 9.75F);
             ForeColor = UiTheme.Ink; BackColor = UiTheme.Page; StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(1080, 680); MinimumSize = new Size(680, 470);
             TableLayoutPanel root = CreateLayout(1, 3, UiTheme.Page);
@@ -50,7 +50,7 @@ namespace CoreAllocator
             Panel toolbar = new RepaintPanel { Dock = DockStyle.Fill, BackColor = UiTheme.Page, Margin = Padding.Empty };
             CapsuleLabel hardware = new CapsuleLabel { Text = service.Topology.CpuName, Font = new Font(Font.FontFamily, 8.5F),
                 ForeColor = UiTheme.Muted, BackColor = Color.White, AccessibleName = "CPU 型号" };
-            tips.SetToolTip(hardware, service.Topology.CpuName + "\r\nv0.13.13 · " + (Native.IsAdministrator ? "管理员权限" : "普通用户权限"));
+            tips.SetToolTip(hardware, service.Topology.CpuName + "\r\n" + Program.DisplayVersion + " · " + (Native.IsAdministrator ? "管理员权限" : "普通用户权限"));
             searchBox = new SearchSurface(search) { Width = 72, Margin = Padding.Empty };
             search.TextChanged += delegate { applications.ScrollTo(0); RenderProcesses(); };
             searchBox.Click += delegate { ShowToolbarMenu(moreMenu); };
@@ -190,6 +190,8 @@ namespace CoreAllocator
             moreMenu.Items.Add(permissionCheckItem);
             var startup = new GlyphMenuItem("开机自启动", UiGlyph.Play, delegate { ToggleStartup(); });
             moreMenu.Items.Add(startup);
+            var updates = new GlyphMenuItem("检查更新…", UiGlyph.Refresh, delegate { OpenUpdateCheck(); });
+            moreMenu.Items.Add(updates);
             moreMenu.Items.Add(new CapsuleMenuSeparator());
             var uninstall = new GlyphMenuItem("卸载…", UiGlyph.Uninstall, delegate { OpenUninstall(); });
             moreMenu.Items.Add(uninstall);
@@ -198,6 +200,7 @@ namespace CoreAllocator
                 CloseProcessDetails();
                 schemes.Enabled = !busy && schemeStore != null;
                 restoreSettingsItem.Enabled = !busy && CanRestoreScheduling;
+                updates.Enabled = !busy;
                 uninstall.Enabled = !busy;
                 try
                 {
@@ -217,6 +220,15 @@ namespace CoreAllocator
                 }
             };
             UpdateState();
+        }
+
+        private void OpenUpdateCheck()
+        {
+            if (busy || Interacting) return;
+            CloseProcessDetails();
+            settingsDialogOpen = true;
+            try { using (var dialog = new UpdateDialog()) dialog.ShowDialog(this); }
+            finally { settingsDialogOpen = false; FlushDeferredRender(); }
         }
 
         private void ToggleStartup()

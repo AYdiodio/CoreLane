@@ -127,6 +127,7 @@ namespace CoreAllocator
                 StartupAutomationTests(working);
                 CpuAssignmentLabelTests(working);
                 CapsuleControlsTests(working);
+                ReleaseUpdateTests();
                 UnifiedViewTests(working);
                 TrayRuleTests(working);
                 PerformanceTests(working);

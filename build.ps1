@@ -1,4 +1,4 @@
-﻿param([string]$OutputName = 'CoreLane.v0.13.13.exe')
+﻿param([string]$OutputName = 'CoreLane.v0.13.16.exe')
 $ErrorActionPreference = 'Stop'
 if ([System.IO.Path]::GetFileName($OutputName) -ne $OutputName -or -not $OutputName.EndsWith('.exe')) { throw 'OutputName must be an executable filename.' }
 $projectRoot = $PSScriptRoot
@@ -15,7 +15,7 @@ $arguments += '/resource:' + $appIcon + ',CoreAllocator.BlueViolet.ico'
 $logoAtlas = Join-Path $projectRoot 'assets\icons\rounded-logos-v1.png'
 if (-not (Test-Path -LiteralPath $logoAtlas)) { throw 'Missing embedded logo atlas: assets\icons\rounded-logos-v1.png' }
 $arguments += '/resource:' + $logoAtlas + ',CoreAllocator.Assets.RoundedLogos.png'
-$arguments += '/reference:Microsoft.CSharp.dll'
+$arguments += '/reference:Microsoft.CSharp.dll', '/reference:System.Net.Http.dll'
 $arguments += '/resource:' + (Join-Path $projectRoot 'App.config') + ',CoreAllocator.App.config'
 & $compiler @arguments @sourceFiles
 if ($LASTEXITCODE -ne 0) { throw ('Build failed, compiler exit code: ' + $LASTEXITCODE) }

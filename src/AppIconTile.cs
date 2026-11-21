@@ -159,6 +159,7 @@ namespace CoreAllocator
         internal bool UnifiedIcons = true;
         internal bool ShowCpuAssignment;
         internal CpuAssignmentLabel AssignmentLabel;
+        internal Keys PressModifiers { get; private set; }
         internal event MouseEventHandler DragReleased;
 
         internal AppIconTile()
@@ -179,6 +180,17 @@ namespace CoreAllocator
         }
         protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); hover = true; animation.Start(); }
         protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hover = false; animation.Start(); }
+        protected override void WndProc(ref Message message)
+        {
+            const int leftDown = 0x0201, leftDoubleClick = 0x0203, shift = 0x0004, control = 0x0008;
+            if (message.Msg == leftDown || message.Msg == leftDoubleClick)
+            {
+                long buttons = message.WParam.ToInt64();
+                PressModifiers = (buttons & shift) != 0 ? Keys.Shift : Keys.None;
+                if ((buttons & control) != 0) PressModifiers |= Keys.Control;
+            }
+            base.WndProc(ref message);
+        }
         protected override void OnMouseUp(MouseEventArgs e)
         {
             // Finish the internal drag before CheckBox releases capture or raises Click.

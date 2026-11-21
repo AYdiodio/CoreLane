@@ -25,7 +25,10 @@ namespace CoreAllocator
                     more.Close(); StartupInvoke(form, "ShowAutomationMenu");
                     ContextMenuStrip automatic = (ContextMenuStrip)StartupField(form, "automationMenu");
                     Check(automatic.Items.OfType<GlyphMenuItem>().All(item => item.Width == automatic.ClientSize.Width && item.Bounds.Left == 0), "automatic rows use identical columns");
-                    Check(automatic.Items.OfType<CapsuleMenuSeparator>().Count() == 2 && automatic.Items.OfType<GlyphMenuItem>().Any(item => item.Text == "新建方案" && item.Glyph == UiGlyph.Plus), "create and separators remain in the aligned menu");
+                    Check(automatic.Items.OfType<CapsuleMenuSeparator>().Count() == 2 &&
+                        !automatic.Items.OfType<GlyphMenuItem>().Any(item => item.Text == "新建方案") &&
+                        automatic.Items.OfType<GlyphMenuItem>().Single(item => item.Text == "保存方案…").Glyph == UiGlyph.Check,
+                        "the automation menu has one save entry and retains aligned separators");
                     GlyphMenuItem enable = automatic.Items.OfType<GlyphMenuItem>().Single(item => item.Text == "启用方案");
                     Check((ButtonTone)enable.Tag == ButtonTone.Start && enable.Glyph == UiGlyph.Play, "enable keeps green tone and play icon");
                     automatic.Close();
@@ -148,7 +151,7 @@ namespace CoreAllocator
                     checkToolbar();
                     var menu = (ContextMenuStrip)StartupField(form, "moreMenu");
                     Check(menu.Items.Cast<ToolStripItem>().Where(item => !(item is ToolStripSeparator)).Select(item => item.Text).SequenceEqual(
-                        new[] { "自动方案", "刷新应用", "恢复原设置…", "CPU 与设备信息", "检查所选应用权限…", "开机自启动", "卸载…" }), "menu order, startup and uninstall entries");
+                        new[] { "自动方案", "刷新应用", "恢复原设置…", "CPU 与设备信息", "检查所选应用权限…", "开机自启动", "检查更新…", "卸载…" }), "menu order, startup, updates and uninstall entries");
                     Check(!menu.Items[2].Enabled, "empty recovery is disabled");
                     Check(!menu.Items[4].Enabled, "diagnostics requires a selected application");
                     service.Store.Add(new OriginalAffinity { Pid = 54321, Created = 1, Name = "fixture.exe", MaskHex = "1", OwnerSid = "fixture" });

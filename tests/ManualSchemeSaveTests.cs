@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -14,6 +15,49 @@ namespace CoreAllocator
         {
             Topology topology = Topology.Parse(Fixture(false));
             Func<string, ulong, SchemeRule> rule = (path, mask) => new SchemeRule { Application = new SavedApplication { Name = Path.GetFileName(path), Paths = new List<string> { path } }, MaskHex = mask.ToString("X16") };
+            Case("save scheme UI: rule card hugs short content and uses the shared scroll rail for long lists", delegate
+            {
+                var store = new SchemeStore(Path.Combine(working, "save-layout", "schemes.json"));
+                SchemeRule[] many = Enumerable.Range(1, 12).Select(i => rule(@"C:\ManualFixture\app" + i + ".exe", 0xffff)).ToArray();
+                using (var single = new ManualSchemeSaveDialog(store, topology, many.Take(1).ToArray(), saveSession: true))
+                using (var multiple = new ManualSchemeSaveDialog(store, topology, many, saveSession: true))
+                {
+                    single.Show(); Application.DoEvents();
+                    var list = ChildControls(single).OfType<ManualRuleList>().Single();
+                    var target = ChildControls(single).OfType<CardPanel>().Single(card => card.AccessibleName == "方案目标");
+                    var picker = ChildControls(single).OfType<CapsuleSchemePicker>().Single();
+                    var name = ChildControls(single).OfType<TextBox>().Single();
+                    Check(picker.Left == name.Parent.Left && picker.Width == name.Parent.Width, "destination picker and new name have the same edges");
+                    Check(target.Left == list.Parent.Parent.Left && target.Width == list.Parent.Parent.Width, "the destination and preview share the same card edges");
+                    Check(list.Height == list.ContentHeight && list.MaximumScroll == 0, "one rule leaves no blank card area");
+                    int expanded = target.Height;
+                    name.Text = "游戏";
+                    Check(!((Control)single.AcceptButton).Enabled, "the reserved name cannot be saved as a new scheme");
+                    picker.SelectedIndex = picker.Items.FindIndex(item => item.ToString() == "游戏");
+                    Check(!name.Visible && target.Height < expanded && ((Control)single.AcceptButton).Enabled, "switching to an existing target collapses the name and permits saving");
+                    picker.SelectedIndex = 0;
+                    Check(name.Visible && target.Height == expanded, "the name reappears when saving a new scheme: " + name.Visible + ", " + target.Height + " vs " + expanded);
+                    single.Close();
+
+                    multiple.Show(); Application.DoEvents();
+                    list = ChildControls(multiple).OfType<ManualRuleList>().Single();
+                    Check(list.Items.Count == many.Length && list.MaximumScroll > 0, "long list is scrollable without changing its rule count");
+                    foreach (int width in new[] { multiple.MinimumSize.Width, multiple.Width + 65 })
+                    {
+                        multiple.Size = new Size(width, multiple.Height);
+                        Application.DoEvents();
+                        list.ScrollTo(list.MaximumScroll);
+                        Control last = list.Items[list.Items.Count - 1];
+                        Check(last.Bottom - list.ScrollOffset <= list.ClientSize.Height && last.Width == list.ContentWidth,
+                            "last rule fits within the preview when scrolled to the end at either width");
+                        Check(last.Controls.Cast<Control>().All(control => last.ClientRectangle.Contains(control.Bounds) && control.Height > 0) &&
+                            ChildControls(last).OfType<Label>().All(label => label.Height >= label.Font.Height),
+                            "the icon, CPU range and action fit within each rule row at either width");
+                    }
+                    multiple.Close();
+                    Check(!File.Exists(Path.Combine(working, "save-layout", "schemes.json")), "layout inspection does not save data");
+                }
+            });
             Case("manual save: immutable success snapshot, new and merged schemes preserve unrelated rules and startup choice", delegate
             {
                 SchemeStore store = new SchemeStore(Path.Combine(working,"manual-save","schemes.json"));
@@ -95,9 +139,9 @@ namespace CoreAllocator
                                     ChildControls(dialog).OfType<Button>().Single(b=>b.Text=="保存方案").PerformClick();
                                 }
                             };
-                            form.Handle.ToInt64(); timer.Start(); StartupInvoke(form,"OpenSaveManualScheme",true);
+                            form.Handle.ToInt64(); timer.Start(); StartupInvoke(form,"OpenSaveSessionScheme");
                             Check(visited && store.Read().Schemes.Count==0 && Read(child.Id)==mask,"cancel does not save or assign");
-                            commit=true; visited=false; timer.Start(); StartupInvoke(form,"OpenSaveManualScheme",true);
+                            commit=true; visited=false; timer.Start(); StartupInvoke(form,"OpenSaveSessionScheme");
                             Check(visited && store.Read().Schemes.Count==1 && StartupField(form,"automation")==null && store.StartupSchemeId=="game" && Read(child.Id)==mask,"save leaves manual view and automation paused");
                             using(Process later=Process.Start(new ProcessStartInfo{FileName=executable,Arguments="--test-worker",UseShellExecute=false,CreateNoWindow=true}))
                             {

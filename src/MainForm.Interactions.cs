@@ -58,10 +58,10 @@ namespace CoreAllocator
             {
                 if (args.Button != MouseButtons.Left || busy || settingsDialogOpen) return;
                 pointerGesture++;
+                bool additive = (tile.PressModifiers & Keys.Control) != 0, range = (tile.PressModifiers & Keys.Shift) != 0;
                 // The second press may still become a drag; decide only when it is released.
-                pendingCoreEditTile = args.Clicks == 2 && activeDrag == null ? tile : null;
+                pendingCoreEditTile = !additive && args.Clicks == 2 && activeDrag == null ? tile : null;
                 CloseProcessDetails(); pressedTile = tile; pressedPoint = tile.PointToScreen(args.Location); selectedOnPress = false; dragStarted = false;
-                bool additive = (ModifierKeys & Keys.Control) != 0, range = (ModifierKeys & Keys.Shift) != 0;
                 if (range || processSelection.State(tile.Group.Members) == CheckState.Unchecked)
                 {
                     iconSelection.Click(VisibleIcons(), applications.Controls.GetChildIndex(tile), additive, range);
@@ -70,11 +70,10 @@ namespace CoreAllocator
             };
             tile.Click += delegate
             {
-                if (rendering || busy || dragStarted || settingsDialogOpen || pendingCoreEditTile == tile) return;
-                bool mouse = pressedTile == tile;
-                if (!mouse || !selectedOnPress)
-                    iconSelection.Click(VisibleIcons(), applications.Controls.GetChildIndex(tile), !mouse || (ModifierKeys & Keys.Control) != 0, mouse && (ModifierKeys & Keys.Shift) != 0);
-                pressedTile = null; selectedOnPress = false; SyncIconSelection(); UpdateState(); FlushDeferredRender();
+                // Mouse selection is handled on release, even when Windows reports a double click.
+                if (rendering || busy || dragStarted || settingsDialogOpen || pressedTile == tile) return;
+                iconSelection.Click(VisibleIcons(), applications.Controls.GetChildIndex(tile), true, false);
+                SyncIconSelection(); UpdateState(); FlushDeferredRender();
             };
             tile.MouseMove += delegate(object sender, MouseEventArgs args)
             {
@@ -93,12 +92,20 @@ namespace CoreAllocator
             };
             tile.MouseUp += delegate(object sender, MouseEventArgs args)
             {
-                bool open = pendingCoreEditTile == tile && args.Button == MouseButtons.Left && !dragStarted && activeDrag == null && tile.ClientRectangle.Contains(args.Location);
+                if (args.Button != MouseButtons.Left || pressedTile != tile) return;
+                bool click = !busy && !settingsDialogOpen && !dragStarted && activeDrag == null && tile.ClientRectangle.Contains(args.Location);
+                bool open = click && pendingCoreEditTile == tile;
                 pendingCoreEditTile = null;
                 if (open)
                 {
                     ApplicationIconGroup group = tile.Group; int gesture = pointerGesture;
                     BeginInvoke((Action)delegate { if (!IsDisposed && gesture == pointerGesture && activeDrag == null) OpenApplicationCpu(group); });
+                }
+                else if (click && !selectedOnPress)
+                {
+                    bool additive = (tile.PressModifiers & Keys.Control) != 0, range = (tile.PressModifiers & Keys.Shift) != 0;
+                    iconSelection.Click(VisibleIcons(), applications.Controls.GetChildIndex(tile), additive, range);
+                    SyncIconSelection(); UpdateState();
                 }
                 QueueInteractionEnd();
             };

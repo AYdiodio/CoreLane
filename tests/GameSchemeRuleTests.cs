@@ -54,8 +54,10 @@ namespace CoreAllocator
                 }
                 using(ManualSchemeSaveDialog save=new ManualSchemeSaveDialog(store,topology,draft))
                 {
-                    var picker=(CapsuleSchemePicker)typeof(ManualSchemeSaveDialog).GetField("destination",flags).GetValue(save);picker.SelectedIndex=picker.Items.FindIndex(x=>x.ToString()=="游戏");
-                    Check(((TableLayoutPanel)save.Controls[0]).RowStyles[3].Height==0,"existing destination removes new-name row");
+                    var picker=(CapsuleSchemePicker)typeof(ManualSchemeSaveDialog).GetField("destination",flags).GetValue(save);
+                    var root=(TableLayoutPanel)save.Controls[0]; float expandedHeight=root.RowStyles[1].Height;
+                    picker.SelectedIndex=picker.Items.FindIndex(x=>x.ToString()=="游戏");
+                    Check(root.RowStyles[1].Height<expandedHeight,"existing destination collapses the name row and gives the space back to the list");
                     typeof(Button).GetMethod("OnClick",flags).Invoke(ChildControls(save).OfType<Button>().Single(b=>b.Text=="保存到方案"),new object[]{EventArgs.Empty});
                     Check(save.SavedId=="game" && store.Read().GameOverrides.Rules.Single().Mask==8 && store.Read().Games.Count==0,"explicit save preserves core mask without classifying");
                 }

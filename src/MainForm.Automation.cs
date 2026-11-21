@@ -61,11 +61,6 @@ namespace CoreAllocator
                 automationMenu.Items.Add(item);
             }
             automationMenu.Items.Add(new CapsuleMenuSeparator());
-            automationMenu.Items.Add(new GlyphMenuItem("新建方案", UiGlyph.Plus, delegate
-            {
-                OpenSaveManualScheme(true);
-                BeginInvoke((Action)ShowAutomationMenu);
-            }));
             automationMenu.Items.Add(new GlyphMenuItem("保存方案…", UiGlyph.Check, delegate
             {
                 OpenSaveSessionScheme();

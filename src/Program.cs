@@ -9,13 +9,15 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle(CoreAllocator.Program.DisplayName)]
 [assembly: AssemblyProduct(CoreAllocator.Program.DisplayName)]
 [assembly: AssemblyDescription("手动分配选中进程的 CPU 亲和性，保存并恢复原设置")]
-[assembly: AssemblyVersion("0.13.13.0")]
+[assembly: AssemblyVersion("0.13.16.0")]
 
 namespace CoreAllocator
 {
     internal static class Program
     {
         internal const string DisplayName = "CoreLane";
+        internal static readonly Version CurrentVersion = typeof(Program).Assembly.GetName().Version;
+        internal static string DisplayVersion { get { return "v" + CurrentVersion.ToString(3); } }
 
         [STAThread]
         private static int Main(string[] args)
